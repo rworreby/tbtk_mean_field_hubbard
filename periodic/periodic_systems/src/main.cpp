@@ -258,12 +258,10 @@ private:
     double bond_threshold_;
     complex<double> t_;
     friend class Molecule;
-
 };
 
 
 int main(int argc, char **argv) {
-
     string periodicity_direction { "" };
     double periodicity_distance { 0.0 };
     complex<double> t { 1.0 };
@@ -326,33 +324,39 @@ int main(int argc, char **argv) {
 
     Bonds bonds;
     bonds.add_bonds(molecule, threshold, t);
-    //bonds.print_bonds(); 
+    //bonds.print_bonds();
+
+    std::vector<int> atoms_in_unit_cell;
+    double x_min = molecule.get_x_min();
+    double x_max = molecule.get_x_min() + periodicity_distance;
+
+    for(size_t i = 0; i < molecule.size(); ++i){
+        double mol_x_coord = molecule.get_x_coords(i);
+        if(mol_x_coord <= x_max && mol_x_coord >= x_min){
+            atoms_in_unit_cell.push_back(i);
+        }
+    }
+
+    std::cout << "Selected atom in unit cell: " << '\n';
+    for(size_t j = 0; j < atoms_in_unit_cell.size(); ++j){
+        std::cout << atoms_in_unit_cell[j] << " ";
+    }
+    std::cout << '\n';
 
     std::cout << "The box spans in x-dir from " << molecule.get_x_min()
               << " to " << (molecule.get_x_min() + periodicity_distance) << '\n';
 
     //std::cout << molecule << '\n';
     std::cout << "X coords of atom 2: " << molecule.get_x_coords(2) << '\n';
-    std::cout << "X coords of atom 1: " << molecule.get_x_coords(1) << '\n';
-    std::cout << "X coords of atom 0: " << molecule.get_x_coords(0) << '\n';
     std::cout << "Y coords of atom 2: " << molecule.get_y_coords(2) << '\n';
-    std::cout << "Y coords of atom 1: " << molecule.get_y_coords(1) << '\n';
-    std::cout << "Y coords of atom 0: " << molecule.get_y_coords(0) << '\n';
 
     std::cout << "Not crashed yet -3.5" << '\n';
     double unit_cell_size_y = molecule.find_unit_cell_size();
     std::cout << "Unit cell size x: " << periodicity_distance << '\n';
     std::cout << "Unit cell size y: " << unit_cell_size_y << '\n';
 
-
     std::cout << "X coords of atom 2: " << molecule.get_x_coords(2) << '\n';
-    std::cout << "X coords of atom 1: " << molecule.get_x_coords(1) << '\n';
-    std::cout << "X coords of atom 0: " << molecule.get_x_coords(0) << '\n';
     std::cout << "Y coords of atom 2: " << molecule.get_y_coords(2) << '\n';
-    std::cout << "Y coords of atom 1: " << molecule.get_y_coords(1) << '\n';
-    std::cout << "Y coords of atom 0: " << molecule.get_y_coords(0) << '\n';
-
-
 
     std::cout << "Not crashed yet -3" << '\n';
 
