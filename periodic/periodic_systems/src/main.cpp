@@ -36,9 +36,10 @@ using std::complex;
 using std::ofstream;
 
 
-const double atomic_radii_C = 0.68;
-const double threshold = 1e-4;
+const double atomic_radii_C { 0.68 };
+const double threshold { 1e-4 };
 std::complex<double> i(0, 1);
+Model model;
 
 #define PRINTVAR(x) std::cout << #x << " = " << (x) << std::endl;
 void print_help(bool full);
@@ -252,14 +253,48 @@ public:
         return bonds_;
     }
 
-private:
-    //adjacency list for all bonds
+    size_t size(){
+        return bonds_.size();
+    }
+
     bonds_t bonds_;
+private:
     double bond_threshold_;
     complex<double> t_;
     friend class Molecule;
 };
 
+
+bool check_straight_bond_orientation(double x_1, double x_2,
+                                     double y_1, double y_2){
+    double eps = 0.0001;
+    bool same_x = (x_1 > x_2 - eps) && (x_1 < x_2 + eps);
+    bool same_y = (y_1 > y_2 - eps) && (y_1 < y_2 + eps);
+    return same_x || same_y;
+}
+
+/**
+Model create_hamiltonian(Molecule mol, Bonds bonds, complex<double> t_, bool hubbard){
+    Model model;
+    for(int s = 0; s < 2; ++s){
+        for(unsigned int i = 0; i < bonds.bonds_.size(); ++i){
+            model << HoppingAmplitude(-t_, {bonds.bonds_[i].first,s}, {bonds.bonds_[i].second,s})+HC;
+        }
+    }
+    if(hubbard){
+        for(unsigned int s = 0; s < 2; ++s){
+            for(unsigned int i = 0; i < mol.size(); ++i){
+                model << HoppingAmplitude(H_U, {i, s}, {i, s});
+            }
+        }
+    }
+    model.construct();
+	model.setTemperature(0.01);
+
+    std::cout << "Model size in create_hamiltonian: " << model.getBasisSize() << std::endl;
+    return model;
+}
+**/
 
 int main(int argc, char **argv) {
     string periodicity_direction { "" };
@@ -346,6 +381,44 @@ int main(int argc, char **argv) {
     std::cout << "The box spans in x-dir from " << molecule.get_x_min()
               << " to " << (molecule.get_x_min() + periodicity_distance) << '\n';
 
+    bonds_t bonds_in_unit_cell;
+    std::cout << "First elements of the bonds: " << '\n';
+    for(auto el : bonds.bonds_){
+        size_t first_element_in_unit_cell = false;
+        size_t second_element_in_unit_cell = false;
+        for(size_t i = 0; i < atoms_in_unit_cell.size(); ++i){
+            if(el.first == atoms_in_unit_cell[i]){
+                first_element_in_unit_cell = true;
+            }
+            if(el.second == atoms_in_unit_cell[i]){
+                second_element_in_unit_cell = true;
+            }
+            if(first_element_in_unit_cell && second_element_in_unit_cell){
+                bonds_in_unit_cell.push_back(el);
+                break;
+            }
+        }
+    }
+    std::cout << '\n';
+
+    std::cout << "Chosen pairs in unit cell: " << '\n';
+    for(auto el : bonds_in_unit_cell){
+        std::cout << "(" << el.first << "," << el.second << "), ";
+    }
+    std::cout << '\n';
+    std::cout << std::boolalpha;
+    std::cout << "Checking if two atoms are straight:" << '\n';
+
+    std::cout << "Atom 1 and 2: "
+            << check_straight_bond_orientation(molecule.get_x_coords(1),
+            molecule.get_x_coords(2), molecule.get_y_coords(1),
+            molecule.get_y_coords(2)) << '\n';
+
+    std::cout << "Atom 2 and 3: "
+            << check_straight_bond_orientation(molecule.get_x_coords(2),
+            molecule.get_x_coords(3), molecule.get_y_coords(2),
+            molecule.get_y_coords(3)) << '\n';
+
     //std::cout << molecule << '\n';
     std::cout << "X coords of atom 2: " << molecule.get_x_coords(2) << '\n';
     std::cout << "Y coords of atom 2: " << molecule.get_y_coords(2) << '\n';
@@ -410,7 +483,7 @@ int main(int argc, char **argv) {
 
     std::cout << "Not crashed yet 1" << '\n';
 	//Setup model.
-	Model model;
+	//model = create_hamiltonian(molecule, bonds, t, hubbard);
 
     std::cout << "mesh size: " << mesh.size() << '\n';
     for(unsigned int m = 0; m < mesh.size(); m++){
@@ -432,33 +505,29 @@ int main(int argc, char **argv) {
         }
         **/
 
-        complex<double> h_straight = -t*exp(-i*Vector3d::dotProduct(k, r_AB[0]));
+        complex<double> h_straight = -t * exp(-i*Vector3d::dotProduct(k, r_AB[0]));
 
         complex<double> h_diag = -t * (exp(-i*Vector3d::dotProduct(k, r_AB[1]))
-                                 + exp(-i*Vector3d::dotProduct(k, r_AB[2])));
+             + exp(-i*Vector3d::dotProduct(k, r_AB[2])));
 
 
+        for(auto unit_cell_bond : bonds_in_unit_cell){
+            bool aligned_atoms = check_straight_bond_orientation(
+                molecule.get_x_coords(unit_cell_bond.first),
+                molecule.get_x_coords(unit_cell_bond.second),
+                molecule.get_y_coords(unit_cell_bond.first),
+                molecule.get_y_coords(unit_cell_bond.second)
+            );
+            complex<double> h = h_diag;
+            if(aligned_atoms){
+                h = h_straight;
+            }
 
-        for(int n = 0; n < 3; n++){
-
-
-            //Intra unitcell hoppings.
-
-
-            model << HoppingAmplitude(-t, {kIndex[0], 0+4*n}, {kIndex[0], 1+4*n}) + HC;
-            model << HoppingAmplitude(-t, {kIndex[0], 1+4*n}, {kIndex[0], 2+4*n}) + HC;
-            model << HoppingAmplitude(-t, {kIndex[0], 2+4*n}, {kIndex[0], 3+4*n}) + HC;
-            //if(n < 2){
-            model << HoppingAmplitude(-t, {kIndex[0], 0+4*n}, {kIndex[0], 5+4*n}) + HC;
-            model << HoppingAmplitude(-t, {kIndex[0], 3+4*n}, {kIndex[0], 6+4*n}) + HC;
-            //}
-
-            //inter unit cel hoppings
-            model << HoppingAmplitude(-t, {kIndex[0], 0+4*n}, {kIndex[0], 3+4*n}) + HC;
-
-
-            //Inter unit cell hoppings.
-            //model << HoppingAmplitude(-t*exp(i*Vector3d::dotProduct(k, r[0])), {kIndex[0], 3+4*n}, {kIndex[1], 0+4*n}) + HC;
+            model << HoppingAmplitude(
+    			h,
+    			{kIndex[0], kIndex[1], kIndex[2], unit_cell_bond.first},
+    			{kIndex[0], kIndex[1], kIndex[2], unit_cell_bond.second}
+    		) + HC;
         }
     }
     std::cout << "Not crashed yet 2" << '\n';
@@ -519,6 +588,10 @@ int main(int argc, char **argv) {
 	myfile.close();
     **/
 
+    ofstream myfile;
+	myfile.open("results.txt");
+	std::cout << "Writing results to file" << '\n';
+    myfile << "value0, value1, value2, value3, value4, value5, value6, value7" << std::endl;
 	for(unsigned int p = 0; p < 1; p++){
 		Vector3d startPoint = paths[p][0];
 		Vector3d endPoint = paths[p][1];
@@ -542,17 +615,17 @@ int main(int argc, char **argv) {
 			);
 
 
-            std::cout << "Not crashed yet 5" << '\n';
+            //std::cout << "Not crashed yet 5" << '\n';
 			//bandStructure[{0, n}] =
-
-            std::cout << propertyExtractor.getEigenValue(kIndex, 0) << " ";
-			// std::cerr << propertyExtractor.getEigenValue(kIndex, 1) << " ";
-			// std::cerr << propertyExtractor.getEigenValue(kIndex, 2) << " ";
-			// std::cerr << propertyExtractor.getEigenValue(kIndex, 3) << " ";
-			// std::cerr << propertyExtractor.getEigenValue(kIndex, 4) << " ";
-			// std::cerr << propertyExtractor.getEigenValue(kIndex, 5) << " ";
-			// std::cerr << propertyExtractor.getEigenValue(kIndex, 6) << " ";
-			// std::cerr << propertyExtractor.getEigenValue(kIndex, 7) << std::endl;
+        
+            myfile << propertyExtractor.getEigenValue(kIndex, 0) << ", ";
+			myfile << propertyExtractor.getEigenValue(kIndex, 1) << ", ";
+			myfile << propertyExtractor.getEigenValue(kIndex, 2) << ", ";
+			myfile << propertyExtractor.getEigenValue(kIndex, 3) << ", ";
+			myfile << propertyExtractor.getEigenValue(kIndex, 4) << ", ";
+			myfile << propertyExtractor.getEigenValue(kIndex, 5) << ", ";
+			myfile << propertyExtractor.getEigenValue(kIndex, 6) << ", ";
+			myfile << propertyExtractor.getEigenValue(kIndex, 7) << std::endl;
 			// //bandStructure[{1, n}] = propertyExtractor.getEigenValue(kIndex, 1);
 		}
 	}
@@ -561,9 +634,7 @@ int main(int argc, char **argv) {
 
 
     int basisSize = model.getBasisSize();
-    ofstream myfile;
-	myfile.open("results.txt");
-	std::cout << "Writing results to file" << '\n';
+
 
     //double min = bandStructure[{0, 0}];
 	//double max = bandStructure[{1, 0}];
