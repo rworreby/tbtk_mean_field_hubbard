@@ -35,7 +35,7 @@ using std::vector;
 using std::complex;
 using std::ofstream;
 
-
+const double k_eps { 0.0001 };
 const double atomic_radii_C { 0.68 };
 const double threshold { 1e-4 };
 std::complex<double> i(0, 1);
@@ -267,9 +267,8 @@ private:
 
 bool check_straight_bond_orientation(double x_1, double x_2,
                                      double y_1, double y_2){
-    double eps = 0.0001;
-    bool same_x = (x_1 > x_2 - eps) && (x_1 < x_2 + eps);
-    bool same_y = (y_1 > y_2 - eps) && (y_1 < y_2 + eps);
+    bool same_x = (x_1 > x_2 - k_eps) && (x_1 < x_2 + k_eps);
+    bool same_y = (y_1 > y_2 - k_eps) && (y_1 < y_2 + k_eps);
     return same_x || same_y;
 }
 
@@ -367,7 +366,7 @@ int main(int argc, char **argv) {
 
     for(size_t i = 0; i < molecule.size(); ++i){
         double mol_x_coord = molecule.get_x_coords(i);
-        if(mol_x_coord <= x_max && mol_x_coord >= x_min){
+        if(mol_x_coord + k_eps < x_max && mol_x_coord >= x_min - k_eps){
             atoms_in_unit_cell.push_back(i);
         }
     }
@@ -528,6 +527,7 @@ int main(int argc, char **argv) {
     			{kIndex[0], kIndex[1], kIndex[2], unit_cell_bond.first},
     			{kIndex[0], kIndex[1], kIndex[2], unit_cell_bond.second}
     		) + HC;
+
         }
     }
     std::cout << "Not crashed yet 2" << '\n';
@@ -591,7 +591,16 @@ int main(int argc, char **argv) {
     ofstream myfile;
 	myfile.open("results.txt");
 	std::cout << "Writing results to file" << '\n';
-    myfile << "value0, value1, value2, value3, value4, value5, value6, value7" << std::endl;
+    for (size_t i = 0; i < atoms_in_unit_cell.size(); i++) {
+        myfile << "value" << i;
+        if(i != atoms_in_unit_cell.size()-1){
+            myfile << ", ";
+        }
+        else{
+            myfile << std::endl;
+        }
+    }
+    //myfile << "value0, value1, value2, value3, value4, value5, value6, value7, value8, value9, value10, value11, value12, value13" << std::endl;
 	for(unsigned int p = 0; p < 1; p++){
 		Vector3d startPoint = paths[p][0];
 		Vector3d endPoint = paths[p][1];
@@ -608,39 +617,32 @@ int main(int argc, char **argv) {
             //std::cout << "k.y:" << k.y << '\n';
             //std::cout << "k.z:" << k.z << '\n';
 
-
 			Index kIndex = brillouinZone.getMinorCellIndex(
 				{k.x, k.y, k.z},
 				numMeshPoints
 			);
 
-
             //std::cout << "Not crashed yet 5" << '\n';
 			//bandStructure[{0, n}] =
-        
-            myfile << propertyExtractor.getEigenValue(kIndex, 0) << ", ";
-			myfile << propertyExtractor.getEigenValue(kIndex, 1) << ", ";
-			myfile << propertyExtractor.getEigenValue(kIndex, 2) << ", ";
-			myfile << propertyExtractor.getEigenValue(kIndex, 3) << ", ";
-			myfile << propertyExtractor.getEigenValue(kIndex, 4) << ", ";
-			myfile << propertyExtractor.getEigenValue(kIndex, 5) << ", ";
-			myfile << propertyExtractor.getEigenValue(kIndex, 6) << ", ";
-			myfile << propertyExtractor.getEigenValue(kIndex, 7) << std::endl;
+            for(size_t i = 0; i < atoms_in_unit_cell.size(); ++i){
+                myfile << propertyExtractor.getEigenValue(kIndex, atoms_in_unit_cell[i]);
+                if(i != atoms_in_unit_cell.size()-1)
+                    myfile << ", ";
+                else{
+                    myfile << std::endl;
+                }
+            }
 			// //bandStructure[{1, n}] = propertyExtractor.getEigenValue(kIndex, 1);
 		}
 	}
 
     std::cout << "Not crashed yet 6" << '\n';
 
-
     int basisSize = model.getBasisSize();
-
 
     //double min = bandStructure[{0, 0}];
 	//double max = bandStructure[{1, 0}];
-
     //std::cout << "Max and min of BandStructure: " << min << "\n" <<  max << '\n';
-
 
     /**
     for(int i = 0; i < basisSize; ++i){

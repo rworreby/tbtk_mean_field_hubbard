@@ -10,7 +10,7 @@ default_target: all
 .NOTPARALLEL:
 
 
-VARS = input/gnr_7_periodic.xyz -t 1.0 -b 1.7 -H 1.2 -p X 4.26
+VARS = input/gnr_7_periodic.xyz -t 1.0 -b 1.7 -p X 4.26
 
 .PHONY: run
 run: all
