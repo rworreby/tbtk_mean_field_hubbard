@@ -353,71 +353,54 @@ public:
 
             bool spin_is_up = true;
             complex<double> zero {0.0,0.0};
-            if(is_close(first_num, zero) && !is_close(second_num, zero)){
-                //std::cout << "Sizeof spin_down_: " << spin_down_.size() << '\n';
-                spin_down_.push_back(second_num);
-                //std::cout << "Sizeof spin_down_: " << spin_down_.size() << '\n';
-                add_entries(start_of_num, end_of_num, end_of_cplx, false);
-                //std::cout << "Sizeof spin_down_: " << spin_down_.size() << '\n';
+
+            complex<double> temp_1 { std::stod(number_1) };
+            complex<double> temp_2 { std::stod(number_2) };
+
+            complex<double> sum_even { std::abs(temp_1) };
+            complex<double> sum_odd { std::abs(temp_2) };
+            ss_t temp_end_of_cplx { end_of_cplx };
+
+            //std::cout << "eigenvector_: " << eigenvector_ << '\n';
+            while (start_of_num != string::npos) {
+                start_of_num = eigenvector_.find('(', end_of_cplx+1);
+                end_of_num = eigenvector_.find(',', end_of_cplx+1);
+                end_of_cplx = eigenvector_.find(')', end_of_cplx+1);
+                if(start_of_num == string::npos){
+                    break;
+                }
+                number_1 = eigenvector_.substr(start_of_num+1, end_of_num-start_of_num-1);
+                number_2 = eigenvector_.substr(end_of_num+1, end_of_cplx-end_of_num-1);
+                complex<double> odd_number {std::stod(number_1), std::stod(number_2)};
+
+                start_of_num = eigenvector_.find('(', end_of_cplx+1);
+                end_of_num = eigenvector_.find(',', end_of_cplx+1);
+                end_of_cplx = eigenvector_.find(')', end_of_cplx+1);
+
+                number_1 = eigenvector_.substr(start_of_num+1, end_of_num-start_of_num-1);
+                number_2 = eigenvector_.substr(end_of_num+1, end_of_cplx-end_of_num-1);
+                complex<double> even_number {std::stod(number_1), std::stod(number_2)};
+
+                sum_even += std::abs(even_number);
+                sum_odd += std::abs(odd_number);
 
             }
-            else if(!is_close(first_num, zero) && is_close(second_num, zero)){
+
+            //std::cout << "Sum even: " << sum_even << '\n';
+            //std::cout << "Sum odd: " << sum_odd << '\n';
+            start_of_num = eigenvector_.find('(', 4);
+            end_of_num = eigenvector_.find(',', start_of_num);
+            end_of_cplx = eigenvector_.find(')', end_of_num);
+            bool odd_greater_than_even { std::abs(sum_odd.real()) > std::abs(sum_even.real()) };
+
+            if(odd_greater_than_even){
                 spin_up_.push_back(first_num);
-                add_entries(start_of_num, end_of_num, end_of_cplx, true);
             }
             else{
-                //std::cout << "BOTH ENTRIES ARE 0." << '\n';
-
-                complex<double> temp_1 { std::stod(number_1) };
-                complex<double> temp_2 { std::stod(number_2) };
-
-                complex<double> sum_even { std::abs(temp_1) };
-                complex<double> sum_odd { std::abs(temp_2) };
-                ss_t temp_end_of_cplx { end_of_cplx };
-
-                //std::cout << "eigenvector_: " << eigenvector_ << '\n';
-                while (start_of_num != string::npos) {
-                    start_of_num = eigenvector_.find('(', end_of_cplx+1);
-                    end_of_num = eigenvector_.find(',', end_of_cplx+1);
-                    end_of_cplx = eigenvector_.find(')', end_of_cplx+1);
-                    if(start_of_num == string::npos){
-                        break;
-                    }
-                    number_1 = eigenvector_.substr(start_of_num+1, end_of_num-start_of_num-1);
-                    number_2 = eigenvector_.substr(end_of_num+1, end_of_cplx-end_of_num-1);
-                    complex<double> odd_number {std::stod(number_1), std::stod(number_2)};
-
-                    start_of_num = eigenvector_.find('(', end_of_cplx+1);
-                    end_of_num = eigenvector_.find(',', end_of_cplx+1);
-                    end_of_cplx = eigenvector_.find(')', end_of_cplx+1);
-
-                    number_1 = eigenvector_.substr(start_of_num+1, end_of_num-start_of_num-1);
-                    number_2 = eigenvector_.substr(end_of_num+1, end_of_cplx-end_of_num-1);
-                    complex<double> even_number {std::stod(number_1), std::stod(number_2)};
-
-                    sum_even += std::abs(even_number);
-                    sum_odd += std::abs(odd_number);
-                }
-
-                //std::cout << "Sum even: " << sum_even << '\n';
-                //std::cout << "Sum odd: " << sum_odd << '\n';
-                start_of_num = eigenvector_.find('(', 4);
-                end_of_num = eigenvector_.find(',', start_of_num);
-                end_of_cplx = eigenvector_.find(')', end_of_num);
-                bool non_zero_entry { sum_odd.real() > sum_even.real() && sum_odd.imag() > sum_even.imag() };
-                if(non_zero_entry){
-                    spin_up_.push_back(first_num);
-                }
-                else{
-                    spin_down_.push_back(second_num);
-                }
-                add_entries(start_of_num, end_of_num, end_of_cplx, non_zero_entry);
-
+                spin_down_.push_back(second_num);
             }
-
-
+            add_entries(start_of_num, end_of_num, end_of_cplx, odd_greater_than_even);
         }
-
     }
 
     void print_results() {
@@ -463,7 +446,7 @@ private:
 
     static double threshold;
 };
-double Postprocessor::threshold = 1e-7;
+double Postprocessor::threshold = 1e-9;
 
 
 /** Start self consistet mean-field Hubbard **/
@@ -476,7 +459,7 @@ void initSpinAndSiteResolvedDensity(Array<double>& spinAndSiteResolvedDensity){
 		for(unsigned int site = 0; site < k_num_atoms; site++){
 			spinAndSiteResolvedDensity[
 				{spin, site}
-			] = (rand()%100)/100.;
+			] = 1.0; //(rand()%100)/100.;
 		}
 	}
 }

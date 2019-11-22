@@ -353,7 +353,9 @@ public:
 
             bool spin_is_up = true;
             complex<double> zero {0.0,0.0};
+            /**
             if(is_close(first_num, zero) && !is_close(second_num, zero)){
+
                 //std::cout << "Sizeof spin_down_: " << spin_down_.size() << '\n';
                 spin_down_.push_back(second_num);
                 //std::cout << "Sizeof spin_down_: " << spin_down_.size() << '\n';
@@ -365,7 +367,10 @@ public:
                 spin_up_.push_back(first_num);
                 add_entries(start_of_num, end_of_num, end_of_cplx, true);
             }
+
             else{
+            **/
+            if(true){
                 //std::cout << "BOTH ENTRIES ARE 0." << '\n';
 
                 complex<double> temp_1 { std::stod(number_1) };
@@ -397,6 +402,8 @@ public:
 
                     sum_even += std::abs(even_number);
                     sum_odd += std::abs(odd_number);
+                    std::cout << "Even sum: " << sum_even << '\n';
+                    std::cout << "Odd sum: " << sum_odd << '\n';
                 }
 
                 //std::cout << "Sum even: " << sum_even << '\n';
@@ -404,8 +411,8 @@ public:
                 start_of_num = eigenvector_.find('(', 4);
                 end_of_num = eigenvector_.find(',', start_of_num);
                 end_of_cplx = eigenvector_.find(')', end_of_num);
-                bool non_zero_entry { sum_odd.real() > sum_even.real() && sum_odd.imag() > sum_even.imag() };
-                if(non_zero_entry){
+                bool odd_greater_than_even { std::abs(sum_odd.real()) > std::abs(sum_even.real()) && std::abs(sum_odd.imag()) > std::abs(sum_even.imag())};
+                if(odd_greater_than_even){
                     spin_up_.push_back(first_num);
                 }
                 else{
@@ -463,7 +470,7 @@ private:
 
     static double threshold;
 };
-double Postprocessor::threshold = 1e-7;
+double Postprocessor::threshold = 1e-9;
 
 
 /** Start self consistet mean-field Hubbard **/
