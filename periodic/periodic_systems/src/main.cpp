@@ -484,6 +484,11 @@ int main(int argc, char **argv) {
 	//Setup model.
 	//model = create_hamiltonian(molecule, bonds, t, hubbard);
 
+
+    // CURRENT LOCATIONS
+
+
+    
     std::cout << "mesh size: " << mesh.size() << '\n';
     for(unsigned int m = 0; m < mesh.size(); m++){
         Index kIndex = brillouinZone.getMinorCellIndex(
