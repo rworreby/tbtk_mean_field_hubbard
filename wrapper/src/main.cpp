@@ -33,10 +33,8 @@
 #include "TBTK/Property/DOS.h"
 #include "TBTK/Property/EigenValues.h"
 #include "TBTK/PropertyExtractor/BlockDiagonalizer.h"
-#include "TBTK/PropertyExtractor/Diagonalizer.h"
 #include "TBTK/Range.h"
 #include "TBTK/Solver/BlockDiagonalizer.h"
-#include "TBTK/Solver/Diagonalizer.h"
 #include "TBTK/Streams.h"
 #include "TBTK/UnitHandler.h"
 #include "TBTK/Vector3d.h"
@@ -63,9 +61,11 @@ double MIXING_PARAMETER { 0.5 };
 Model model;
 Array<double> spinAndSiteResolvedDensity;
 size_t k_num_atoms { 0 };
+size_t k_num_atoms_unit_cell { 0 };
 const double k_eps { 0.0001 };
 const double atomic_radii_C { 0.68 };
 const double threshold { 1e-4 };
+bool periodic_hubbard { false };
 
 //USAGE:     DEBUG(debug_var++);
 size_t debug_var = 0;
@@ -298,26 +298,32 @@ bool check_straight_bond_orientation(double x_1, double x_2,
 }
 
 Model create_hamiltonian_molecule(Molecule mol, Bonds bonds, complex<double> t_, bool hubbard){
+    std::cout << "Hamiltonian Molecule: Not crashed yet 1" << '\n';
+
 	for(int s = 0; s < 2; ++s){
         for(int i = 0; i < bonds.bonds_.size(); ++i){
             model << HoppingAmplitude(
 				-t_,
-				{bonds.bonds_[i].first, s},
-				{bonds.bonds_[i].second, s}
+				{0, bonds.bonds_[i].first, s},
+				{0, bonds.bonds_[i].second, s}
 			) + HC;
         }
     }
+    std::cout << "Hamiltonian Molecule: Not crashed yet 2" << '\n';
+
     if(hubbard){
         for(int s = 0; s < 2; ++s){
             for(int i = 0; i < mol.size(); ++i){
                 model << HoppingAmplitude(
 					H_U,
-					{i, s},
-					{i, s}
+					{0, i, s},
+					{0, i, s}
 				);
             }
         }
     }
+    std::cout << "Hamiltonian Molecule: Not crashed yet 3" << '\n';
+
     model.construct();
 	model.setTemperature(0.01);
 
@@ -370,8 +376,8 @@ Model create_hamiltonian_periodic(Molecule molecule,
 
 	            model << HoppingAmplitude(
 	    			h,
-	    			{kIndex[0], kIndex[1], kIndex[2], s, unit_cell_bond.first},
-	    			{kIndex[0], kIndex[1], kIndex[2], s, unit_cell_bond.second}
+	    			{kIndex[0], kIndex[1], kIndex[2], unit_cell_bond.first, s},
+	    			{kIndex[0], kIndex[1], kIndex[2], unit_cell_bond.second, s}
 	    		) + HC;
 			}
         }
@@ -380,8 +386,8 @@ Model create_hamiltonian_periodic(Molecule molecule,
 				if(hubbard){
 					model << HoppingAmplitude(
 						H_U,
-						{kIndex[0], kIndex[1], kIndex[2], s, atom},
-						{kIndex[0], kIndex[1], kIndex[2], s, atom}
+						{kIndex[0], kIndex[1], kIndex[2], atom, s},
+						{kIndex[0], kIndex[1], kIndex[2], atom, s}
 					);
 				}
 			}
@@ -595,7 +601,7 @@ complex<double> H_U(const Index &toIndex, const Index &fromIndex){
 //continues as before, but now cutting the step in two each iteration. The
 //procedure stops once a density is found that differes from the
 //TARGET_DENSITY_PER_SITE by at most DENSITY_TOLLERANCE.
-void fixDensity(PropertyExtractor::Diagonalizer &propertyExtractor){
+void fixDensity(PropertyExtractor::BlockDiagonalizer &propertyExtractor){
     double stepLength = 1;
 
 	//Get the eigenvalues.
@@ -670,8 +676,8 @@ void fixDensity(PropertyExtractor::Diagonalizer &propertyExtractor){
 //density, then calculates the spin and site resolved density. The new spin and
 //site resolved density is mixed with the previous values to stabilize the
 //self-consistent calculation.
-bool selfConsistencyCallback(Solver::Diagonalizer &solver){
-	PropertyExtractor::Diagonalizer propertyExtractor(solver);
+bool selfConsistencyCallback(Solver::BlockDiagonalizer &solver){
+	PropertyExtractor::BlockDiagonalizer propertyExtractor(solver);
 
 	//Fix the density.
 	fixDensity(propertyExtractor);
@@ -684,9 +690,10 @@ bool selfConsistencyCallback(Solver::Diagonalizer &solver){
 	//are summed over using the IDX_SUM_ALL specifier, while the density is
 	//stored separately for each spin and site because of the IDX_ALL
 	//specifier.
-	Property::Density density = propertyExtractor.calculateDensity({
-		{IDX_ALL, IDX_ALL}
-	});
+
+    Property::Density density = propertyExtractor.calculateDensity({
+	    {0, IDX_ALL, IDX_ALL}
+    });
 
 	//Update the spin and site resolved density. Mix with the previous
 	//value to stabilize the self-consistent calculation.
@@ -696,6 +703,7 @@ bool selfConsistencyCallback(Solver::Diagonalizer &solver){
 				= MIXING_PARAMETER*spinAndSiteResolvedDensity[
 					{spin, site}
 				] + (1 - MIXING_PARAMETER)*density({
+                    0,
 					(int)site,
                     (int)spin
 				});///(model.getBasisSize()/k_num_atoms);
@@ -734,9 +742,83 @@ bool selfConsistencyCallback(Solver::Diagonalizer &solver){
 		return true;
 }
 
+//Callback function that is to be called each time the model Hamiltonian has
+//been diagonalized. The function first fixes the density to the target
+//density, then calculates the spin and site resolved density. The new spin and
+//site resolved density is mixed with the previous values to stabilize the
+//self-consistent calculation.
+bool selfConsistencyCallbackPeriodic(Solver::BlockDiagonalizer &solver){
+	PropertyExtractor::BlockDiagonalizer propertyExtractor(solver);
+
+	//Fix the density.
+	fixDensity(propertyExtractor);
+
+	//Save the old result for later comparison.
+	Array<double> oldSpinAndSiteResolvedDensity
+		= spinAndSiteResolvedDensity;
+
+	//Calculate the spin and site resolved density. Note that the k-indices
+	//are summed over using the IDX_SUM_ALL specifier, while the density is
+	//stored separately for each spin and site because of the IDX_ALL
+	//specifier.
+
+    Property::Density density = propertyExtractor.calculateDensity({
+	    {IDX_SUM_ALL, IDX_SUM_ALL, IDX_SUM_ALL, IDX_ALL, IDX_ALL}
+    });
+
+	//Update the spin and site resolved density. Mix with the previous
+	//value to stabilize the self-consistent calculation.
+    for(int spin = 0; spin < 2; spin++){
+		for(int site = 0; site < k_num_atoms_unit_cell; site++){
+			spinAndSiteResolvedDensity[{spin, site}]
+				= MIXING_PARAMETER*spinAndSiteResolvedDensity[
+					{spin, site}
+				] + (1 - MIXING_PARAMETER)*density({
+                    IDX_SUM_ALL,
+                    IDX_SUM_ALL,
+                    IDX_SUM_ALL,
+					(int)site,
+                    (int)spin
+				}); ///(model.getBasisSize()/k_num_atoms);
+		}
+	}
+
+	//Calculate the maximum difference between the new and old spin and
+	//site resolved density.
+    int max_spin {0}, max_site{0};
+	double maxDifference = 0;
+	for(int spin = 0; spin < 2; spin++){
+		for(int site = 0; site < k_num_atoms; site++){
+			double difference = abs(
+				spinAndSiteResolvedDensity[{spin, site}]
+				- oldSpinAndSiteResolvedDensity[{spin, site}]
+			);
+			if(difference > maxDifference){
+				maxDifference = difference;
+                max_spin = spin; max_site = site;
+            }
+
+		}
+	}
+
+    //std::cout << "Conv. difference:"
+                //<< std::abs(maxDifference - spin_and_site_resolved_density_tol)
+                //<< "\tabs. value: "
+                //<< spinAndSiteResolvedDensity[{max_spin, max_site}]
+                //<< "\tlocation: " << max_spin << " " << max_site << '\n';
+
+	//Return whether the spin and site resolved density has converged. The
+	//self-consistent loop will stop once true is returned.
+	if(maxDifference > spin_and_site_resolved_density_tol)
+		return false;
+	else
+		return true;
+}
+
+
 int main(int argc, char *argv[]){
     string periodicity_direction { "" };
-    double periodicity_distance { 0.0 };
+    double periodicity_distance { 1.0 };
     complex<double> t { 1.0 };
     double threshold { 1.7 };
     bool hubbard { false };
@@ -754,6 +836,7 @@ int main(int argc, char *argv[]){
             if(!strcmp(argv[i], "-p") || !strcmp(argv[i], "--periodic")){
                 periodicity_direction = argv[++i];
                 periodicity_distance = std::stod(argv[++i]);
+                periodic_hubbard = true;
             }
             if(!strcmp(argv[i], "-b") || !strcmp(argv[i], "--bond_threshold")){
                 threshold = std::stod(argv[++i]);
@@ -792,7 +875,7 @@ int main(int argc, char *argv[]){
 
 	UnitHandler::setScales({"1 C", "1 pcs", "1 eV", "1 Ao", "1 K", "1 s"});
 
-	std::cout << "Parameter values: " << '\n';
+	std::cout << "Parameter values: " << '\n' << std::boolalpha;
     PRINTVAR(periodicity_direction); PRINTVAR(periodicity_distance);
     PRINTVAR(t); PRINTVAR(threshold); PRINTVAR(hubbard); PRINTVAR(periodic);
 
@@ -831,6 +914,7 @@ int main(int argc, char *argv[]){
 
 	    std::cout << "The box spans in x-dir from " << molecule.get_x_min()
 	              << " to " << (molecule.get_x_min() + periodicity_distance) << '\n';
+        k_num_atoms_unit_cell = atoms_in_unit_cell.size();
 	}
 
     bonds_t bonds_in_unit_cell;
@@ -940,12 +1024,7 @@ int main(int argc, char *argv[]){
 
     initSpinAndSiteResolvedDensity(spinAndSiteResolvedDensity);
 
-
-
-	// CURRENT LOCATION
-
-
-
+    std::cout << "Not crashed yet 2" << '\n';
 	if(!periodic){
     	model = create_hamiltonian_molecule(molecule, bonds, t, hubbard);
 	}
@@ -953,50 +1032,48 @@ int main(int argc, char *argv[]){
 		model = create_hamiltonian_periodic(molecule, atoms_in_unit_cell, bonds, bonds_in_unit_cell, brillouinZone, mesh, numMeshPoints, r_AB, t, hubbard);
 	}
 
-	Solver::Diagonalizer solver_mol;
-	Solver::BlockDiagonalizer solver_periodic;
+    std::cout << "Not crashed yet 3" << '\n';
 
-	if(periodic){
-		solver_periodic.setModel(model);
-	}
-	else{
-		solver_mol.setModel(model);
-	}
+	Solver::BlockDiagonalizer solver;
 
-	if(hubbard && periodic){
-        solver_periodic.setSelfConsistencyCallback(selfConsistencyCallback);
-	    solver_periodic.setMaxIterations(1000);
+	solver.setModel(model);
+
+    std::cout << "Geometry of model: " << solver.getModel().getGeometry() << '\n';
+	if(hubbard){
+        if(periodic){
+            solver.setSelfConsistencyCallback(selfConsistencyCallbackPeriodic);
+    	    solver.setMaxIterations(1000);
+        }
+        else{
+            solver.setSelfConsistencyCallback(selfConsistencyCallback);
+    	    solver.setMaxIterations(1000);
+        }
     }
-	else if(hubbard && !periodic){
-        solver_mol.setSelfConsistencyCallback(selfConsistencyCallback);
-	    solver_mol.setMaxIterations(1000);
-    }
+    std::cout << "Not crashed yet 4" << '\n';
+
 	//Run the solver. This will run a self-consistent loop where the
 	//Hamiltonian first is diagonalized, and then the
 	//selfConsistencyCallback is called. The procedure is repeated until
 	//either the self-consistency callback returns true, or the maximum
 	//number of iterations is reached.
-	if(periodic){
-		solver_periodic.run();
-	}
-	else{
-		solver_mol.run();
-	}
+    solver.run();
+
+    std::cout << "Not crashed yet 5" << '\n';
 
     if(hubbard) std::cout << "Final chemical potential: " << model.getChemicalPotential() << '\n';
 	//Create PropertyExtractor
-	PropertyExtractor::Diagonalizer pe(solver_mol);
-	PropertyExtractor::BlockDiagonalizer propertyExtractor(solver_periodic);
+	PropertyExtractor::BlockDiagonalizer propertyExtractor(solver);
 
 	//Setup energy window
 	const double k_lower_bound = -5.0;
 	const double k_upper_bound = 5.0;
 	const size_t k_resolution = 1000;
-	pe.setEnergyWindow(k_lower_bound, k_upper_bound, k_resolution);
 	propertyExtractor.setEnergyWindow(k_lower_bound, k_upper_bound, k_resolution);
 
-    auto eigen_vectors = solver_mol.getEigenVectors();
-	auto eigen_values = solver_mol.getEigenValues();
+    std::cout << "Not crashed yet 6" << '\n';
+
+
+    //std::cout << "Not crashed yet 7" << '\n';
 
 	Vector3d lowest({-M_PI / periodicity_distance, 0, 0});
     Vector3d highest({M_PI / periodicity_distance, 0, 0});
@@ -1010,7 +1087,9 @@ int main(int argc, char *argv[]){
 	myfile.open("eigenval_eigenvec.txt");
 	std::cout << "Writing Eigenvalues and Eigenvectors to file" << '\n';
 
+    /**
 	if(!periodic){
+
 		for(size_t i = 0; i < basisSize; ++i){
 			myfile << eigen_values[i] << " ";
 			for(size_t j = 0; j < basisSize; ++j)
@@ -1032,6 +1111,7 @@ int main(int argc, char *argv[]){
 	        processor_down.process();
 	        processed_data << processor_down.stringyfy() << "\n";
 	    }
+
 	}
 	else{
 		for (size_t i = 0; i < atoms_in_unit_cell.size(); i++) {
@@ -1078,7 +1158,7 @@ int main(int argc, char *argv[]){
 			}
 		}
 	}
-
+    **/
 	myfile.close();
     std::cout << "Writing done." << '\n';
     return 0;

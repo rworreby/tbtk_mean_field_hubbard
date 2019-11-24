@@ -19,9 +19,9 @@
 #include "TBTK/BrillouinZone.h"
 #include "TBTK/Model.h"
 #include "TBTK/Property/DOS.h"
-#include "TBTK/PropertyExtractor/BlockDiagonalizer.h"
+#include "TBTK/PropertyExtractor/Diagonalizer.h"
 #include "TBTK/Range.h"
-#include "TBTK/Solver/BlockDiagonalizer.h"
+#include "TBTK/Solver/Diagonalizer.h"
 #include "TBTK/Streams.h"
 #include "TBTK/UnitHandler.h"
 #include "TBTK/Vector3d.h"
@@ -488,7 +488,7 @@ int main(int argc, char **argv) {
     // CURRENT LOCATIONS
 
 
-    
+
     std::cout << "mesh size: " << mesh.size() << '\n';
     for(unsigned int m = 0; m < mesh.size(); m++){
         Index kIndex = brillouinZone.getMinorCellIndex(
@@ -526,11 +526,17 @@ int main(int argc, char **argv) {
             if(aligned_atoms){
                 h = h_straight;
             }
+            int first_index = unit_cell_bond.first;
+            int second_index = unit_cell_bond.second;
+
+            std::cout << "kIndex[0]: " << kIndex[0] << '\n';
+            std::cout << "kIndex[1]: " << kIndex[1] << '\n';
+            std::cout << "kIndex[2]: " << kIndex[2] << '\n';
 
             model << HoppingAmplitude(
     			h,
-    			{kIndex[0], kIndex[1], kIndex[2], unit_cell_bond.first},
-    			{kIndex[0], kIndex[1], kIndex[2], unit_cell_bond.second}
+    			{kIndex[0], kIndex[1], kIndex[2], first_index},
+    			{kIndex[0], kIndex[1], kIndex[2], second_index}
     		) + HC;
 
         }
@@ -540,12 +546,13 @@ int main(int argc, char **argv) {
     model.construct();
 
     //Setup the solver.
-	Solver::BlockDiagonalizer solver;
+	Solver::Diagonalizer solver;
 	solver.setModel(model);
+    solver.setVerbose(true);
 	solver.run();
 
 	//Setup the property extractor.
-	PropertyExtractor::BlockDiagonalizer propertyExtractor(solver);
+	PropertyExtractor::Diagonalizer propertyExtractor(solver);
 	propertyExtractor.setEnergyWindow(
 		ENERGY_LOWER_BOUND,
 		ENERGY_UPPER_BOUND,
@@ -630,7 +637,7 @@ int main(int argc, char **argv) {
             //std::cout << "Not crashed yet 5" << '\n';
 			//bandStructure[{0, n}] =
             for(size_t i = 0; i < atoms_in_unit_cell.size(); ++i){
-                myfile << propertyExtractor.getEigenValue(kIndex, atoms_in_unit_cell[i]);
+                myfile << propertyExtractor.getEigenValue(atoms_in_unit_cell[i]);
                 if(i != atoms_in_unit_cell.size()-1)
                     myfile << ", ";
                 else{
