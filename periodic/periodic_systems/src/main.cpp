@@ -19,9 +19,9 @@
 #include "TBTK/BrillouinZone.h"
 #include "TBTK/Model.h"
 #include "TBTK/Property/DOS.h"
-#include "TBTK/PropertyExtractor/Diagonalizer.h"
+#include "TBTK/PropertyExtractor/BlockDiagonalizer.h"
 #include "TBTK/Range.h"
-#include "TBTK/Solver/Diagonalizer.h"
+#include "TBTK/Solver/BlockDiagonalizer.h"
 #include "TBTK/Streams.h"
 #include "TBTK/UnitHandler.h"
 #include "TBTK/Vector3d.h"
@@ -529,10 +529,6 @@ int main(int argc, char **argv) {
             int first_index = unit_cell_bond.first;
             int second_index = unit_cell_bond.second;
 
-            std::cout << "kIndex[0]: " << kIndex[0] << '\n';
-            std::cout << "kIndex[1]: " << kIndex[1] << '\n';
-            std::cout << "kIndex[2]: " << kIndex[2] << '\n';
-
             model << HoppingAmplitude(
     			h,
     			{kIndex[0], kIndex[1], kIndex[2], first_index},
@@ -546,13 +542,13 @@ int main(int argc, char **argv) {
     model.construct();
 
     //Setup the solver.
-	Solver::Diagonalizer solver;
+	Solver::BlockDiagonalizer solver;
 	solver.setModel(model);
     solver.setVerbose(true);
 	solver.run();
 
 	//Setup the property extractor.
-	PropertyExtractor::Diagonalizer propertyExtractor(solver);
+	PropertyExtractor::BlockDiagonalizer propertyExtractor(solver);
 	propertyExtractor.setEnergyWindow(
 		ENERGY_LOWER_BOUND,
 		ENERGY_UPPER_BOUND,

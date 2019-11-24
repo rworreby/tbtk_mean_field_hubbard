@@ -304,8 +304,8 @@ Model create_hamiltonian_molecule(Molecule mol, Bonds bonds, complex<double> t_,
         for(int i = 0; i < bonds.bonds_.size(); ++i){
             model << HoppingAmplitude(
 				-t_,
-				{0, bonds.bonds_[i].first, s},
-				{0, bonds.bonds_[i].second, s}
+				{0, s, bonds.bonds_[i].first},
+				{0, s, bonds.bonds_[i].second}
 			) + HC;
         }
     }
@@ -316,8 +316,8 @@ Model create_hamiltonian_molecule(Molecule mol, Bonds bonds, complex<double> t_,
             for(int i = 0; i < mol.size(); ++i){
                 model << HoppingAmplitude(
 					H_U,
-					{0, i, s},
-					{0, i, s}
+					{0, s, i},
+					{0, s, i}
 				);
             }
         }
@@ -577,7 +577,7 @@ void initSpinAndSiteResolvedDensity(Array<double>& spinAndSiteResolvedDensity){
 		for(int site = 0; site < k_num_atoms; site++){
 			spinAndSiteResolvedDensity[
 				{spin, site}
-			] = 1.0; //(rand()%100)/100.;
+			] = (rand()%100)/100.0; //1.0;
 		}
 	}
 }
@@ -704,8 +704,8 @@ bool selfConsistencyCallback(Solver::BlockDiagonalizer &solver){
 					{spin, site}
 				] + (1 - MIXING_PARAMETER)*density({
                     0,
-					(int)site,
-                    (int)spin
+                    (int)spin,
+                    (int)site,
 				});///(model.getBasisSize()/k_num_atoms);
 		}
 	}
@@ -869,9 +869,6 @@ int main(int argc, char *argv[]){
 		1,
 		1
 	};
-	const size_t ENERGY_RESOLUTION = 1000;
-	const double ENERGY_LOWER_BOUND = -10;
-	const double ENERGY_UPPER_BOUND = 10;
 
 	UnitHandler::setScales({"1 C", "1 pcs", "1 eV", "1 Ao", "1 K", "1 s"});
 
@@ -1072,9 +1069,6 @@ int main(int argc, char *argv[]){
 
     std::cout << "Not crashed yet 6" << '\n';
 
-
-    //std::cout << "Not crashed yet 7" << '\n';
-
 	Vector3d lowest({-M_PI / periodicity_distance, 0, 0});
     Vector3d highest({M_PI / periodicity_distance, 0, 0});
     vector<vector<Vector3d>> paths = {
@@ -1082,23 +1076,101 @@ int main(int argc, char *argv[]){
     };
 	Range interpolator(0, 1, K_POINTS_PER_PATH);
 
-	size_t basisSize = model.getBasisSize();
+//	size_t basisSize = model.getBasisSize();
 	ofstream myfile;
 	myfile.open("eigenval_eigenvec.txt");
 	std::cout << "Writing Eigenvalues and Eigenvectors to file" << '\n';
 
-    /**
-	if(!periodic){
+    //Property::EigenValues eigen_values = propertyExtractor.getEigenValues();
+	//FileWriter::writeEigenValues(eigen_values);
 
-		for(size_t i = 0; i < basisSize; ++i){
-			myfile << eigen_values[i] << " ";
-			for(size_t j = 0; j < basisSize; ++j)
-				myfile << eigen_vectors[i*basisSize + j] << " ";
-			myfile << '\n';
+    if(periodic){
+        for (size_t i = 0; i < atoms_in_unit_cell.size(); i++) {
+            myfile << "value" << i;
+            if(i != atoms_in_unit_cell.size()-1){
+                myfile << ", ";
+            }
+            else{
+                myfile << std::endl;
+            }
+        }
+        for(unsigned int p = 0; p < 1; p++){
+			Vector3d startPoint = paths[p][0];
+			Vector3d endPoint = paths[p][1];
+
+	        std::cout << "startPoint: " << startPoint << '\n';
+	        std::cout << "endPoint: " << endPoint << '\n';
+			for(unsigned int n = 0; n < K_POINTS_PER_PATH; n++){
+				Vector3d k = (
+					interpolator[n]*endPoint
+					+ (1 - interpolator[n])*startPoint
+				);
+
+				Index kIndex = brillouinZone.getMinorCellIndex(
+					{k.x, k.y, k.z},
+					numMeshPoints
+				);
+
+	            for(size_t i = 0; i < atoms_in_unit_cell.size(); ++i){
+	                myfile << propertyExtractor.getEigenValue(kIndex, atoms_in_unit_cell[i]);
+	                if(i != atoms_in_unit_cell.size()-1)
+	                    myfile << ", ";
+	                else{
+	                    myfile << std::endl;
+	                }
+	            }
+			}
 		}
-		std::cout << "Writing done." << '\n';
-		myfile.close();
+    }
+    else{
+        /**
+        std::cout << "All Eigenvalues: " << '\n';
+        for (size_t k = 0; k < k_num_atoms*2; k++) {
+            std::cout << propertyExtractor.getEigenValue(k) << " ";
+        }
+        **/
+        std::cout << '\n';
+        std::cout << "Eigenvalues polarisation test: " << '\n';
+        std::cout << propertyExtractor.getEigenValue(k_num_atoms/2-2) << "\n";
+        std::cout << propertyExtractor.getEigenValue(k_num_atoms/2-1) << "\n";
+        std::cout << propertyExtractor.getEigenValue(k_num_atoms/2) << "\n";
+        std::cout << propertyExtractor.getEigenValue(k_num_atoms/2+1) << "\n";
+        std::cout << propertyExtractor.getEigenValue(k_num_atoms+k_num_atoms/2-2) << "\n";
+        std::cout << propertyExtractor.getEigenValue(k_num_atoms+k_num_atoms/2-1) << "\n";
+        std::cout << propertyExtractor.getEigenValue(k_num_atoms+k_num_atoms/2) << "\n";
+        std::cout << propertyExtractor.getEigenValue(k_num_atoms+k_num_atoms/2+1) << "\n";
 
+
+            /**
+            tring spinchannel = "";
+            switch(s){
+                case 0:
+                    spinchannel = "su";
+                    break;
+                case 1:
+                    spinchannel = "sd";
+                    break;
+                default:
+                    break;
+            }
+            **/
+        for(int spin = 0; spin < 2; spin++){
+            string spinchannel = "su";
+            if(spin == 1)
+                spinchannel = "sd";
+
+            for(int i = 0; i < k_num_atoms; ++i){
+                myfile << spinchannel << " ";
+                myfile << propertyExtractor.getEigenValue(k_num_atoms*spin + i) << " ";
+                for(int j = 0; j < k_num_atoms; ++j){
+                    myfile << propertyExtractor.getAmplitude(i + k_num_atoms*spin, {0, spin, j}) << " ";
+                }
+                myfile << std::endl;
+            }
+        }
+    }
+
+        /**
 	    std::ifstream read_back;
 	    read_back.open("eigenval_eigenvec.txt");
 
@@ -1111,54 +1183,9 @@ int main(int argc, char *argv[]){
 	        processor_down.process();
 	        processed_data << processor_down.stringyfy() << "\n";
 	    }
+        **/
 
-	}
-	else{
-		for (size_t i = 0; i < atoms_in_unit_cell.size(); i++) {
-	        myfile << "value" << i;
-	        if(i != atoms_in_unit_cell.size()-1){
-	            myfile << ", ";
-	        }
-	        else{
-	            myfile << std::endl;
-	        }
-	    }
-	    //myfile << "value0, value1, value2, value3, value4, value5, value6, value7, value8, value9, value10, value11, value12, value13" << std::endl;
-		for(unsigned int p = 0; p < 1; p++){
-			Vector3d startPoint = paths[p][0];
-			Vector3d endPoint = paths[p][1];
 
-	        std::cout << "startPoint: " << startPoint << '\n';
-	        std::cout << "endPoint: " << endPoint << '\n';
-			for(unsigned int n = 0; n < K_POINTS_PER_PATH; n++){
-				Vector3d k = (
-					interpolator[n]*endPoint
-					+ (1 - interpolator[n])*startPoint
-				);
-
-	            //std::cout << "k.x:" << k[0] << '\n';
-	            //std::cout << "k.y:" << k.y << '\n';
-	            //std::cout << "k.z:" << k.z << '\n';
-
-				Index kIndex = brillouinZone.getMinorCellIndex(
-					{k.x, k.y, k.z},
-					numMeshPoints
-				);
-
-	            //std::cout << "Not crashed yet 5" << '\n';
-				//bandStructure[{0, n}] =
-	            for(size_t i = 0; i < atoms_in_unit_cell.size(); ++i){
-	                myfile << propertyExtractor.getEigenValue(kIndex, atoms_in_unit_cell[i]);
-	                if(i != atoms_in_unit_cell.size()-1)
-	                    myfile << ", ";
-	                else{
-	                    myfile << std::endl;
-	                }
-	            }
-			}
-		}
-	}
-    **/
 	myfile.close();
     std::cout << "Writing done." << '\n';
     return 0;

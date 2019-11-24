@@ -4,7 +4,7 @@ import math
 #x = np.array()
 atoms = []
 
-band_thickness = 20
+band_thickness = 8
 band_length = 8
 repetitions = int(band_thickness/4)
 
@@ -61,7 +61,7 @@ for i in atoms:
 print("")
 
 z = 0.0
-f = open("gnr_20_periodic.xyz", "w+")
+f = open("gnr_8_periodic.xyz", "w+")
 
 f.write("%d\n\n" % (len(atoms)/2))
 for i in range(0, len(atoms), 2):
