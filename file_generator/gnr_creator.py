@@ -3,7 +3,7 @@ import numpy as np
 #x = np.array()
 atoms = []
 
-num_atoms = 5 #thickness of gnr
+num_atoms = 9 #thickness of gnr
 minor_atoms = int((num_atoms-1)/2)
 major_atoms = int((num_atoms+1)/2)
 
@@ -55,7 +55,7 @@ for i in atoms:
 print("")
 
 z = 0.0
-f = open("gnr_5_periodic.xyz", "w+")
+f = open("gnr_9_periodic.xyz", "w+")
 
 f.write("%d\n\n" % (len(atoms)/2))
 for i in range(0, len(atoms), 2):

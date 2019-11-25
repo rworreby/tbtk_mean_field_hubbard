@@ -361,6 +361,7 @@ int main(int argc, char **argv) {
     //bonds.print_bonds();
 
     std::vector<int> atoms_in_unit_cell;
+    std::vector<int> atoms_on_unit_cell_border;
     double x_min = molecule.get_x_min();
     double x_max = molecule.get_x_min() + periodicity_distance;
 
@@ -368,6 +369,9 @@ int main(int argc, char **argv) {
         double mol_x_coord = molecule.get_x_coords(i);
         if(mol_x_coord + k_eps < x_max && mol_x_coord >= x_min - k_eps){
             atoms_in_unit_cell.push_back(i);
+            if(mol_x_coord < x_min + 0.1 || mol_x_coord > x_max - 1.5){
+                atoms_on_unit_cell_border.push_back(i);
+            }
         }
     }
 
@@ -376,6 +380,12 @@ int main(int argc, char **argv) {
         std::cout << atoms_in_unit_cell[j] << " ";
     }
     std::cout << '\n';
+    std::cout << "Selected atom at unit cell border: " << '\n';
+    for(size_t j = 0; j < atoms_on_unit_cell_border.size(); ++j){
+        std::cout << atoms_on_unit_cell_border[j] << " ";
+    }
+    std::cout << '\n';
+
 
     std::cout << "The box spans in x-dir from " << molecule.get_x_min()
               << " to " << (molecule.get_x_min() + periodicity_distance) << '\n';
@@ -485,10 +495,6 @@ int main(int argc, char **argv) {
 	//model = create_hamiltonian(molecule, bonds, t, hubbard);
 
 
-    // CURRENT LOCATIONS
-
-
-    
     std::cout << "mesh size: " << mesh.size() << '\n';
     for(unsigned int m = 0; m < mesh.size(); m++){
         Index kIndex = brillouinZone.getMinorCellIndex(
@@ -509,11 +515,15 @@ int main(int argc, char **argv) {
         }
         **/
 
-        complex<double> h_straight = -t * exp(-i*Vector3d::dotProduct(k, r_AB[0]));
 
+        // TODO: change to hopping 1 in unit cell / phase shift to atoms in neighboring cell
+        complex<double> h_straight = -t * exp(-i*Vector3d::dotProduct(k, r_AB[0]));
+        //std::cout << "h_straight: " << h_straight << '\n';
         complex<double> h_diag = -t * (exp(-i*Vector3d::dotProduct(k, r_AB[1]))
              + exp(-i*Vector3d::dotProduct(k, r_AB[2])));
-
+        //std::cout << "h_diag: " << h_diag << '\n';
+        //PRINTVAR(exp(-i*Vector3d::dotProduct(k, r_AB[1])));
+        //PRINTVAR(exp(-i*Vector3d::dotProduct(k, r_AB[2])));
 
         for(auto unit_cell_bond : bonds_in_unit_cell){
             bool aligned_atoms = check_straight_bond_orientation(
