@@ -332,58 +332,38 @@ Model create_hamiltonian_molecule(Molecule mol, Bonds bonds, complex<double> t_,
 }
 
 Model create_hamiltonian_periodic(Molecule molecule,
-		std::vector<int> atoms_in_unit_cell, Bonds bonds,
-		bonds_t bonds_in_unit_cell, BrillouinZone brillouinZone,
+		std::vector<int> atoms_in_unit_cell,
+        std::vector<int> atoms_on_unit_cell_border, Bonds bonds,
+        bonds_t bonds_in_unit_cell, BrillouinZone brillouinZone,
 		vector<vector<double>> mesh, vector<unsigned int> numMeshPoints,
-		Vector3d r_AB[3], complex<double> t, bool hubbard){
+		Vector3d r[3], complex<double> t, bool hubbard){
 	for(int m = 0; m < mesh.size(); m++){
         Index kIndex = brillouinZone.getMinorCellIndex(
             mesh[m],
             numMeshPoints
         );
 
-        //y:mesh[m][1]
         Vector3d k({mesh[m][0], mesh[m][1], mesh[m][2]});
 
-        /**
-        if (m < 10) {
-            std::cout << "Values of h / t to neighboring atoms: " << std::endl;
-            std::cout << "Straight interaction: " << exp(-i*Vector3d::dotProduct(k, r_AB[0])) << '\n';
-            std::cout << "Diagnoal interaction 1: " << exp(-i*Vector3d::dotProduct(k, r_AB[1])) << '\n';
-            std::cout << "Diagnoal interaction 2: " << exp(-i*Vector3d::dotProduct(k, r_AB[2])) << '\n';
-            std::cout << "Diagnoal interaction tot: " << exp(-i*Vector3d::dotProduct(k, r_AB[1])) + exp(-i*Vector3d::dotProduct(k, r_AB[2])) << '\n';
-        }
-        **/
-
-        complex<double> h_straight = -t * exp(-i*Vector3d::dotProduct(k, r_AB[0]));
-
-        complex<double> h_diag = -t * (exp(-i*Vector3d::dotProduct(k, r_AB[1]))
-             + exp(-i*Vector3d::dotProduct(k, r_AB[2])));
+        complex<double> h_within_unit_cell = -t;
+        complex<double> h_next_unit_cell = -t * exp(-i*Vector3d::dotProduct(k, r[0]));
 
         for(auto unit_cell_bond : bonds_in_unit_cell){
 			for(int s = 0; s < 2; s++){
-
-	            bool aligned_atoms = check_straight_bond_orientation(
-	                molecule.get_x_coords(unit_cell_bond.first),
-	                molecule.get_x_coords(unit_cell_bond.second),
-	                molecule.get_y_coords(unit_cell_bond.first),
-	                molecule.get_y_coords(unit_cell_bond.second)
-	            );
-	            complex<double> h = h_diag;
-	            if(aligned_atoms){
-	                h = h_straight;
-	            }
-
 	            model << HoppingAmplitude(
-	    			h,
+	    			h_within_unit_cell,
 	    			{kIndex[0], kIndex[1], kIndex[2], unit_cell_bond.first, s},
 	    			{kIndex[0], kIndex[1], kIndex[2], unit_cell_bond.second, s}
 	    		) + HC;
 			}
         }
-		for(auto atom : atoms_in_unit_cell){
-			for (int s = 0; s < 2; s++) {
-				if(hubbard){
+        // TODO: implement!
+        for(auto border_atom : atoms_on_unit_cell_border){
+
+        }
+        if(hubbard){
+    		for(auto atom : atoms_in_unit_cell){
+    			for (int s = 0; s < 2; s++) {
 					model << HoppingAmplitude(
 						H_U,
 						{kIndex[0], kIndex[1], kIndex[2], atom, s},
@@ -892,15 +872,19 @@ int main(int argc, char *argv[]){
 
 
 	std::vector<int> atoms_in_unit_cell;
+    std::vector<int> atoms_on_unit_cell_border;
 	double x_min = molecule.get_x_min();
 	double x_max = molecule.get_x_min() + periodicity_distance;
 
 	if(periodic){
 		for(size_t i = 0; i < molecule.size(); ++i){
 			double mol_x_coord = molecule.get_x_coords(i);
-			if(mol_x_coord + k_eps < x_max && mol_x_coord >= x_min - k_eps){
-				atoms_in_unit_cell.push_back(i);
-			}
+            if(mol_x_coord + k_eps < x_max && mol_x_coord >= x_min - k_eps){
+                atoms_in_unit_cell.push_back(i);
+                if(mol_x_coord > x_max - 0.8){
+                    atoms_on_unit_cell_border.push_back(i);
+                }
+            }
 		}
 
 		std::cout << "Selected atom in unit cell: " << '\n';
@@ -908,6 +892,11 @@ int main(int argc, char *argv[]){
 	        std::cout << atoms_in_unit_cell[j] << " ";
 	    }
 	    std::cout << '\n';
+        std::cout << "Selected atom at unit cell border: " << '\n';
+        for(size_t j = 0; j < atoms_on_unit_cell_border.size(); ++j){
+            std::cout << atoms_on_unit_cell_border[j] << " ";
+        }
+        std::cout << '\n';
 
 	    std::cout << "The box spans in x-dir from " << molecule.get_x_min()
 	              << " to " << (molecule.get_x_min() + periodicity_distance) << '\n';
@@ -915,6 +904,7 @@ int main(int argc, char *argv[]){
 	}
 
     bonds_t bonds_in_unit_cell;
+    bonds_t bonds_crossing_unit_cell_borders;
 
 	if(periodic){
 	    std::cout << "First elements of the bonds: " << '\n';
@@ -935,8 +925,37 @@ int main(int argc, char *argv[]){
 	        }
 		}
 
+        // TODO: Correct this function so only bonds ranging over the edges of
+        //       a unit cell are considered.
 	    std::cout << '\n';
+        for(auto el : bonds.bonds_){
+	        bool one_element_in_unit_cell = false;
+	        bool one_element_in_next_unit_cell = false;
+	        for(size_t i = 0; i < molecule.size(); ++i){
+	            if(el.first == atoms_on_unit_cell_border[i]){
+	                one_element_in_unit_cell = true;
+	            }
+	            if(el.second == atoms_on_unit_cell_border[i]){
+	                one_element_in_next_unit_cell = true;
+	            }
+	            if(one_element_in_unit_cell && one_element_in_next_unit_cell){
+	                break;
+	            }
+                // TODO: add check for right hand side border
+                if(one_element_in_unit_cell || one_element_in_next_unit_cell){
+                    //for(size_t i = 0; i < atoms_on_unit_cell_border.size(); ++i){
 
+                    bonds_crossing_unit_cell_borders.push_back(el);
+                    //}
+                }
+	        }
+            std::cout << "Val: " << one_element_in_unit_cell << " " <<  one_element_in_next_unit_cell << '\n';
+		}
+        std::cout << "Found bonds going from unit cell to neighboring cell:" << '\n';
+        for(auto el : bonds_crossing_unit_cell_borders){
+            std::cout << "(" << el.first << "," << el.second << "), ";
+        }
+        std::cout << '\n';
 	    std::cout << "Chosen pairs in unit cell: " << '\n';
 	    for(auto el : bonds_in_unit_cell){
 	        std::cout << "(" << el.first << "," << el.second << "), ";
@@ -1026,7 +1045,10 @@ int main(int argc, char *argv[]){
     	model = create_hamiltonian_molecule(molecule, bonds, t, hubbard);
 	}
 	else{
-		model = create_hamiltonian_periodic(molecule, atoms_in_unit_cell, bonds, bonds_in_unit_cell, brillouinZone, mesh, numMeshPoints, r_AB, t, hubbard);
+        model = create_hamiltonian_periodic(molecule, atoms_in_unit_cell,
+            atoms_on_unit_cell_border, bonds, bonds_in_unit_cell,
+            brillouinZone, mesh, numMeshPoints, r, t, hubbard
+            );
 	}
 
     std::cout << "Not crashed yet 3" << '\n';
