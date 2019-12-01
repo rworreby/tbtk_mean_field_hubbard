@@ -50,6 +50,7 @@ using std::ofstream;
 using namespace TBTK;
 
 void print_help(bool full);
+bool is_contained(std::vector<int> vec, int i);
 complex<double> H_U(const Index &toIndex, const Index &fromIndex);
 
 std::complex<double> i(0, 1);
@@ -73,6 +74,10 @@ size_t debug_var = 0;
 
 #define PRINTVAR(x) std::cout << #x << " = " << (x) << std::endl;
 void print_help(bool full);
+
+bool is_close(double num, double lim){
+    return (num > lim - threshold && num < lim + threshold);
+}
 
 struct XYZCoordinate{
     float x;
@@ -334,7 +339,8 @@ Model create_hamiltonian_molecule(Molecule mol, Bonds bonds, complex<double> t_,
 Model create_hamiltonian_periodic(Molecule molecule,
 		std::vector<int> atoms_in_unit_cell,
         std::vector<int> atoms_on_unit_cell_border, Bonds bonds,
-        bonds_t bonds_in_unit_cell, BrillouinZone brillouinZone,
+        bonds_t bonds_within_unit_cell,
+        bonds_t bonds_crossing_unit_cell_borders, BrillouinZone brillouinZone,
 		vector<vector<double>> mesh, vector<unsigned int> numMeshPoints,
 		Vector3d r[3], complex<double> t, bool hubbard){
 	for(int m = 0; m < mesh.size(); m++){
@@ -346,21 +352,46 @@ Model create_hamiltonian_periodic(Molecule molecule,
         Vector3d k({mesh[m][0], mesh[m][1], mesh[m][2]});
 
         complex<double> h_within_unit_cell = -t;
-        complex<double> h_next_unit_cell = -t * exp(-i*Vector3d::dotProduct(k, r[0]));
+        complex<double> one(1, 0);
+        complex<double> h_next_unit_cell = -t * (one + exp(-i*Vector3d::dotProduct(k, r[0])));
 
-        for(auto unit_cell_bond : bonds_in_unit_cell){
-			for(int s = 0; s < 2; s++){
+        static int printer = 0;
+        for(int s = 0; s < 2; s++){
+            for(auto unit_cell_bond : bonds_within_unit_cell){
 	            model << HoppingAmplitude(
 	    			h_within_unit_cell,
 	    			{kIndex[0], kIndex[1], kIndex[2], unit_cell_bond.first, s},
 	    			{kIndex[0], kIndex[1], kIndex[2], unit_cell_bond.second, s}
 	    		) + HC;
+                if(printer == 0){
+                    std::cout << "Added hoppings from " << unit_cell_bond.first << " to " << unit_cell_bond.second << " as intra-cell hopping with spin " << s << "." << '\n';
+                }
+            }
+            for(auto inter_cell_bond : bonds_crossing_unit_cell_borders){
+                model << HoppingAmplitude(
+	    			h_next_unit_cell,
+	    			{kIndex[0], kIndex[1], kIndex[2], inter_cell_bond.first, s},
+	    			{kIndex[0], kIndex[1], kIndex[2], inter_cell_bond.second, s}
+	    		) + HC;
+                if(printer == 0){
+                    std::cout << "Added hoppings from " << inter_cell_bond.first << " to " << inter_cell_bond.second << " as border hopping with spin " << s << "." << '\n';
+                }
+            }
+        }
+
+        printer = 1;
+        // TODO: implement!
+        /**
+        for(auto border_bonds : bonds_crossing_unit_cell_borders){
+            for(int s = 0; s < 2; s++){
+	            model << HoppingAmplitude(
+	    			h_next_unit_cell,
+	    			{kIndex[0], kIndex[1], kIndex[2], border_bonds.first, s},
+	    			{kIndex[0], kIndex[1], kIndex[2], border_bonds.second, s}
+	    		) + HC;
 			}
         }
-        // TODO: implement!
-        for(auto border_atom : atoms_on_unit_cell_border){
-
-        }
+        **/
         if(hubbard){
     		for(auto atom : atoms_in_unit_cell){
     			for (int s = 0; s < 2; s++) {
@@ -796,6 +827,16 @@ bool selfConsistencyCallbackPeriodic(Solver::BlockDiagonalizer &solver){
 }
 
 
+bool is_contained(std::vector<int> vec, int i){
+    for(auto el : vec){
+        if(el == i){
+            return true;
+        }
+    }
+    return false;
+}
+
+
 int main(int argc, char *argv[]){
     string periodicity_direction { "" };
     double periodicity_distance { 1.0 };
@@ -870,7 +911,6 @@ int main(int argc, char *argv[]){
     //Create bonds in molecule
     bonds.add_bonds(molecule, threshold, t);
 
-
 	std::vector<int> atoms_in_unit_cell;
     std::vector<int> atoms_on_unit_cell_border;
 	double x_min = molecule.get_x_min();
@@ -903,7 +943,7 @@ int main(int argc, char *argv[]){
         k_num_atoms_unit_cell = atoms_in_unit_cell.size();
 	}
 
-    bonds_t bonds_in_unit_cell;
+    bonds_t bonds_within_unit_cell;
     bonds_t bonds_crossing_unit_cell_borders;
 
 	if(periodic){
@@ -919,7 +959,7 @@ int main(int argc, char *argv[]){
 	                second_element_in_unit_cell = true;
 	            }
 	            if(first_element_in_unit_cell && second_element_in_unit_cell){
-	                bonds_in_unit_cell.push_back(el);
+	                bonds_within_unit_cell.push_back(el);
 	                break;
 	            }
 	        }
@@ -929,35 +969,89 @@ int main(int argc, char *argv[]){
         //       a unit cell are considered.
 	    std::cout << '\n';
         for(auto el : bonds.bonds_){
+            bool is_border_bond = false;
 	        bool one_element_in_unit_cell = false;
 	        bool one_element_in_next_unit_cell = false;
-	        for(size_t i = 0; i < molecule.size(); ++i){
+	        for(size_t i = 0; i < atoms_on_unit_cell_border.size(); ++i){
 	            if(el.first == atoms_on_unit_cell_border[i]){
+                    if(is_contained(atoms_in_unit_cell, el.second)){
+                        is_border_bond = false;
+                        break;
+                    }
 	                one_element_in_unit_cell = true;
+                    is_border_bond = true;
 	            }
 	            if(el.second == atoms_on_unit_cell_border[i]){
+                    if(is_contained(atoms_in_unit_cell, el.first)){
+                        is_border_bond = false;
+                        break;
+                    }
 	                one_element_in_next_unit_cell = true;
+                    is_border_bond = true;
 	            }
 	            if(one_element_in_unit_cell && one_element_in_next_unit_cell){
-	                break;
+                    is_border_bond = false;
+                    break;
 	            }
-                // TODO: add check for right hand side border
-                if(one_element_in_unit_cell || one_element_in_next_unit_cell){
-                    //for(size_t i = 0; i < atoms_on_unit_cell_border.size(); ++i){
+                if (i == 100){
+                    std::cout << "Bonds: " << el.first << ", " << el.second << '\n';
+                    std::cerr << "Atom: " << atoms_on_unit_cell_border[i] << '\n';
 
-                    bonds_crossing_unit_cell_borders.push_back(el);
-                    //}
+                    std::cout << "Elemets: " << one_element_in_unit_cell << ", "
+                              << one_element_in_next_unit_cell << '\n';
+                    std::cout << '\n';
                 }
-	        }
-            std::cout << "Val: " << one_element_in_unit_cell << " " <<  one_element_in_next_unit_cell << '\n';
+
+            }
+            if(is_border_bond){
+                bonds_crossing_unit_cell_borders.push_back(el);
+            }
 		}
+        bonds_t mapped_unit_cell_bonds;
+        for(auto bond : bonds_crossing_unit_cell_borders){
+            if(is_contained(atoms_in_unit_cell, bond.first)){
+                int second_atom = 0;
+                for(int i = 0; i < molecule.size(); ++i){
+                    if(bond.first == i){
+                        continue;
+                    }
+                    std::cout << "Comparing atom " << bond.second << " with coordinates " << "(" << molecule.get_x_coords(bond.second) << " " << molecule.get_y_coords(bond.second) << ")" << '\n';
+                    std::cout << "Atom in comparison: " << i << " (" << molecule.get_x_coords(i) << " " << molecule.get_y_coords(i) << ")" << '\n';
+                    if(is_close(molecule.get_x_coords(i),
+                            molecule.get_x_coords(bond.second)-periodicity_distance)
+                            && is_close(molecule.get_y_coords(i),
+                            molecule.get_y_coords(bond.second))){
+                        second_atom = i;
+                        std::cout << "CLOSE ATOMS FOUND: " << i << " corresponds to atom " << bond.second << "." << '\n';
+                    }
+                }
+                mapped_unit_cell_bonds.push_back(std::make_pair(bond.first, second_atom));
+            }
+            if(is_contained(atoms_in_unit_cell, bond.second)){
+                int second_atom = 0;
+                for(int i = 0; i < molecule.size(); ++i){
+                    if(is_close(molecule.get_x_coords(i),
+                            molecule.get_x_coords(bond.first)-periodicity_distance)
+                            && is_close(molecule.get_y_coords(i),
+                            molecule.get_y_coords(bond.first))){
+                        second_atom = i;
+                    }
+                }
+                mapped_unit_cell_bonds.push_back(std::make_pair(bond.second, second_atom));
+            }
+        }
+        std::cout << "Bonds in unit cell mapper:" << '\n';
+        for(auto el : mapped_unit_cell_bonds){
+            std::cout << "(" << el.first << "," << el.second << "), ";
+        }
+        std::cout << '\n';
         std::cout << "Found bonds going from unit cell to neighboring cell:" << '\n';
         for(auto el : bonds_crossing_unit_cell_borders){
             std::cout << "(" << el.first << "," << el.second << "), ";
         }
         std::cout << '\n';
 	    std::cout << "Chosen pairs in unit cell: " << '\n';
-	    for(auto el : bonds_in_unit_cell){
+	    for(auto el : bonds_within_unit_cell){
 	        std::cout << "(" << el.first << "," << el.second << "), ";
 		}
 	    std::cout << '\n';
@@ -1001,7 +1095,7 @@ int main(int argc, char *argv[]){
 
     // Calculate the reciprocal lattice vectors.
     Vector3d r_AB[3];
-    r_AB[0] = (r[0] + 2*r[1])/3.;
+    r_AB[0] = (r[0] + 2*r[1])/3.0;
 	r_AB[1] = -r[1] + r_AB[0];
 	r_AB[2] = -r[0] - r[1] + r_AB[0];
 	r[1] = Vector3d({0,	periodicity_distance,	0});
@@ -1046,7 +1140,8 @@ int main(int argc, char *argv[]){
 	}
 	else{
         model = create_hamiltonian_periodic(molecule, atoms_in_unit_cell,
-            atoms_on_unit_cell_border, bonds, bonds_in_unit_cell,
+            atoms_on_unit_cell_border, bonds, bonds_within_unit_cell,
+            bonds_crossing_unit_cell_borders,
             brillouinZone, mesh, numMeshPoints, r, t, hubbard
             );
 	}
@@ -1105,10 +1200,12 @@ int main(int argc, char *argv[]){
 
     //Property::EigenValues eigen_values = propertyExtractor.getEigenValues();
 	//FileWriter::writeEigenValues(eigen_values);
-
+    std::vector<int> spec_print = {0, 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19};
+    //atoms_in_unit_cell = spec_print;
     if(periodic){
+
         for (size_t i = 0; i < atoms_in_unit_cell.size(); i++) {
-            myfile << "value" << i;
+            myfile << "value" << atoms_in_unit_cell[i];
             if(i != atoms_in_unit_cell.size()-1){
                 myfile << ", ";
             }
@@ -1116,6 +1213,8 @@ int main(int argc, char *argv[]){
                 myfile << std::endl;
             }
         }
+
+
         for(unsigned int p = 0; p < 1; p++){
 			Vector3d startPoint = paths[p][0];
 			Vector3d endPoint = paths[p][1];
@@ -1132,7 +1231,6 @@ int main(int argc, char *argv[]){
 					{k.x, k.y, k.z},
 					numMeshPoints
 				);
-
 	            for(size_t i = 0; i < atoms_in_unit_cell.size(); ++i){
 	                myfile << propertyExtractor.getEigenValue(kIndex, atoms_in_unit_cell[i]);
 	                if(i != atoms_in_unit_cell.size()-1)

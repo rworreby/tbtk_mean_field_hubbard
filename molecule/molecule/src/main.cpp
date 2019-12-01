@@ -459,7 +459,7 @@ void initSpinAndSiteResolvedDensity(Array<double>& spinAndSiteResolvedDensity){
 		for(unsigned int site = 0; site < k_num_atoms; site++){
 			spinAndSiteResolvedDensity[
 				{spin, site}
-			] = 1.0; //(rand()%100)/100.;
+			] = (rand()%100)/100.0;
 		}
 	}
 }
