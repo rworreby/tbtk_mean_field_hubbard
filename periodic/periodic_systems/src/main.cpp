@@ -483,7 +483,7 @@ int main(int argc, char **argv) {
 	//Setup model.
 	//model = create_hamiltonian(molecule, bonds, t, hubbard);
 
-    std::cout << "mesh size: " << mesh.size() << '\n';
+    std::cout << "mesh size: " << mesh.size() << '\n' << '\n' << '\n';
     for(unsigned int m = 0; m < mesh.size(); m++){
         Index kIndex = brillouinZone.getMinorCellIndex(
             mesh[m],
@@ -493,13 +493,14 @@ int main(int argc, char **argv) {
         Vector3d kmesh({mesh[m][0], mesh[m][1], mesh[m][2]});
 
         complex<double> one(1, 0);
-        complex<double> h_unit_cell = -t;
-        complex<double> h_border_crossing = -t * exp(-i*Vector3d::dotProduct(kmesh, k_orig[0]/3.0));
-        complex<double> h_both = -t * (one + exp(-i*Vector3d::dotProduct(kmesh, k_orig[0])));
+        // complex<double> h_unit_cell = -t;
+        // complex<double> h_border_crossing = -t * exp(-i*Vector3d::dotProduct(kmesh, k_orig[0]/3.0));
+        // complex<double> h_both = -t * (one + exp(-i*Vector3d::dotProduct(kmesh, k_orig[0])));
 
         h_state_enum h_state = undefined_enum;
 
         static int printer = 0;
+        const int comp_val = 3;
         for(auto bond : bonds_in_unit_cell){
             bool first_is_odd = true;
             complex<double> h;
@@ -513,21 +514,27 @@ int main(int argc, char **argv) {
                 - molecule.get_y_coords(bond.first)
             };
 
-            if(printer == 0){
-                std::cout << "Distance Vector between atoms: (" << x_diff
-                          << ", " << y_diff << ", 0)" << '\n';
+            if(printer == comp_val){
+                std::cout << "Distance Vector between atoms " << bond.first
+                          << ", " << bond.second << " in original bond: ("
+                          << x_diff << ", " << y_diff << ", 0)" << '\n';
             }
             Vector3d dist_vec({x_diff, y_diff, 0});
 
             h = -t * exp(-i*Vector3d::dotProduct(kmesh, dist_vec));
-            if(printer == 0)
-                std::cout << "h:" << h << '\n';
+            if(printer == comp_val)
+                std::cout << "h for original bond: " << h << '\n';
 
             if((bond.first + bond.second) % 2 == 0){
                 if(bond_is_in_unit_cell(bonds_in_unit_cell,
                         bond.first+1, bond.second)
                         || bond_is_in_unit_cell(bonds_in_unit_cell,
                         bond.first, bond.second+1)){
+
+                    if(printer == comp_val){
+                        std::cout << "Skipping hopping for bond (" << bond.first
+                              << ", " << bond.second << ")." << '\n';
+                    }
                     continue;
                 }
                 h_state = h_unit_cell_enum;
@@ -560,29 +567,54 @@ int main(int argc, char **argv) {
 
                     Vector3d second_dist_vec({second_x_diff, second_y_diff, 0});
 
-                    h = -t * (exp(-i*Vector3d::dotProduct(kmesh, -dist_vec)) + exp(-i*Vector3d::dotProduct(kmesh, -second_dist_vec)));
+                    h = -t * (exp(-i*Vector3d::dotProduct(kmesh, dist_vec)) + exp(-i*Vector3d::dotProduct(kmesh, second_dist_vec)));
                     h_state = h_both_enum;
-                    if(printer < 3){
+                    if(printer > comp_val && printer < comp_val + 3){
                         std::cout << "h both is: " << h << '\n';
-                        std::cout << "dist vec: " << -dist_vec << '\n';
+                        std::cout << "dist vec: " << dist_vec << '\n';
                         std::cout << "dist vec2: " << second_dist_vec << '\n';
                     }
                 }
                 else{
                     if(first_is_odd){
-                        if(printer == 0)
-                            std::cout << "h:" << h << '\n';
-                        if(printer == 0)
-                            std::cout << "Spec Border hopping distance vector between atoms: " << -dist_vec << '\n';
+                        if(printer == comp_val)
+                            std::cout << "Spec Border hopping distance vector between atoms ("
+                            << (bond.first - 1) << ", " << bond.second << "): "
+                            << dist_vec << '\n';
                         h = -t * exp(-i*Vector3d::dotProduct(kmesh, dist_vec));
-                        if(printer == 0)
-                            std::cout << "h:" << h << '\n';
+                        if(printer == comp_val){
+                            std::cout << "h for spec border hopping:" << h << '\n';
+                            std::cout << "Comparing dist vec with minus dist vec:"
+                                      << -t * exp(-i*Vector3d::dotProduct(kmesh, dist_vec))
+                                      << " against "
+                                      << -t * exp(-i*Vector3d::dotProduct(kmesh, -dist_vec))
+                                      << '\n';
+                        }
                     }
                     h_state = h_border_crossing_enum;
                 }
             }
             int first_atom { bond.first };
             int second_atom { bond.second };
+            if(h_state == h_border_crossing_enum){
+                double x_diff_test = molecule.get_x_coords(first_atom - first_is_odd) - molecule.get_x_coords(second_atom - (1-first_is_odd));
+                double y_diff_test = molecule.get_y_coords(first_atom - first_is_odd) - molecule.get_y_coords(second_atom - (1-first_is_odd));
+                Vector3d dist_vec_test({x_diff_test, y_diff_test, 0});
+                h = -t * (one + exp(-i*Vector3d::dotProduct(kmesh, dist_vec_test)));
+                model << HoppingAmplitude(
+        			h,
+        			{kIndex[0], kIndex[1], kIndex[2], (first_atom - first_is_odd)},
+                    {kIndex[0], kIndex[1], kIndex[2], (second_atom - (1-first_is_odd))}
+        		) + HC;
+                if(printer == comp_val){
+                    std::cout << "Added hoppings from " << (second_atom - (1-first_is_odd))
+                            << " to " << (first_atom - first_is_odd)
+                            << " as " << h_state << " with h value " << h << '\n';
+                    if(h_state = h_border_crossing_enum)
+                        std::cout << "CALLED BORDER CROSSING FROM 0" << '\n';
+                }
+                continue;
+            }
             if(first_atom % 2 == 1){
                 first_atom -= 1;
 
@@ -592,10 +624,10 @@ int main(int argc, char **argv) {
         			{kIndex[0], kIndex[1], kIndex[2], first_atom}
         		) + HC;
 
-                if(printer == 0){
+                if(printer == comp_val){
                     std::cout << "Added hoppings from " << second_atom
                             << " to " << first_atom
-                            << " as " << h_state << '\n';
+                            << " as " << h_state << " with h value " << h << '\n';
                     if(h_state = h_border_crossing_enum)
                         std::cout << "CALLED BORDER CROSSING FROM 1" << '\n';
                 }
@@ -607,10 +639,10 @@ int main(int argc, char **argv) {
         			{kIndex[0], kIndex[1], kIndex[2], first_atom},
         			{kIndex[0], kIndex[1], kIndex[2], second_atom}
         		) + HC;
-                if(printer == 0){
+                if(printer == comp_val){
                     std::cout << "Added hoppings from " << first_atom
                             << " to " << second_atom
-                            << " as " << h_state << '\n';
+                            << " as " << h_state << " with h value " << h << '\n';
                     if(h_state = h_border_crossing_enum)
                         std::cout << "CALLED BORDER CROSSING FROM 2" << '\n';
                 }
@@ -621,10 +653,10 @@ int main(int argc, char **argv) {
         			{kIndex[0], kIndex[1], kIndex[2], first_atom},
         			{kIndex[0], kIndex[1], kIndex[2], second_atom}
         		) + HC;
-                if(printer == 0){
+                if(printer == comp_val){
                     std::cout << "Added hoppings from " << first_atom
                             << " to " << second_atom
-                            << " as " << h_state << '\n';
+                            << " as " << h_state << " with h value " << h << '\n';
                     if(h_state = h_border_crossing_enum)
                         std::cout << "CALLED BORDER CROSSING FROM 3" << '\n';
                 }

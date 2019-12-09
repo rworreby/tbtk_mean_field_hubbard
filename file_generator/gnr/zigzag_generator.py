@@ -8,7 +8,7 @@ band_thickness = 8
 band_length = 8
 repetitions = int(band_thickness/4)
 
-y_dist = 2.459512146747806
+y_dist = 2.46
 reg_dist = 1.42
 half_reg_dist = reg_dist / 2.0
 spec_dist = 1.23
