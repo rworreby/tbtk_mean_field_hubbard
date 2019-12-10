@@ -3,8 +3,8 @@ import numpy as np
 #x = np.array()
 atoms = []
 
-band_thickness = 17 #thickness of gnr
-band_length = 5
+band_thickness = 9 #thickness of gnr
+band_length = 1
 
 minor_atoms = int((band_thickness-1)/2)
 major_atoms = int((band_thickness+1)/2)
@@ -22,7 +22,7 @@ whole_x = False
 # print("x: %3f" % x)
 
 print(atoms)
-for i in range(8):
+for i in range(band_length):
     y = y_dist / 2.0
 
     for i in range(minor_atoms):

@@ -1,14 +1,17 @@
 // c++ xyz_periodic_handler.cpp -o main && ./main gnr_7_periodic -p X 4.26 -t 1.8
 // ./build/Application gnr_7_periodic.xyz -p X 4.26 -t 1.8
+                - molecule.get_x_coords(bond.first-first_is_odd);
 
 #include <algorithm> //std::sort()
 #include <complex>
 #include <cstring>
+#include <cstdlib>
 #include <fstream>
 #include <functional>
 #include <iomanip> //std::setw()
 #include <iostream>
 #include <limits>
+#include <locale>
 #include <map>
 #include <set>
 #include <string>
@@ -17,6 +20,7 @@
 
 #include "TBTK/Array.h"
 #include "TBTK/BrillouinZone.h"
+#include "TBTK/Functions.h"
 #include "TBTK/Model.h"
 #include "TBTK/Property/DOS.h"
 #include "TBTK/PropertyExtractor/BlockDiagonalizer.h"
@@ -38,7 +42,15 @@ using std::ofstream;
 const double k_eps { 0.0001 };
 const double atomic_radii_C { 0.68 };
 const double threshold { 1e-4 };
+size_t k_num_atoms { 0 };
+size_t k_num_atoms_unit_cell { 0 };
 std::complex<double> i(0, 1);
+Array<double> spinAndSiteResolvedDensity;
+double U { 0.0 };
+double spin_and_site_resolved_density_tol { 1e-5 };
+double DENSITY_TOLLERANCE { 1e-7 };
+double TARGET_DENSITY_PER_SITE { 1.0 };
+double MIXING_PARAMETER { 0.5 };
 Model model;
 
 #define PRINTVAR(x) std::cout << #x << " = " << (x) << std::endl;
@@ -283,14 +295,6 @@ private:
 };
 
 
-bool check_straight_bond_orientation(double x_1, double x_2,
-                                     double y_1, double y_2){
-    bool same_x = (x_1 > x_2 - k_eps) && (x_1 < x_2 + k_eps);
-    bool same_y = (y_1 > y_2 - k_eps) && (y_1 < y_2 + k_eps);
-    return same_x || same_y;
-}
-
-
 bool bond_is_in_unit_cell(bonds_t bonds_in_unit_cell,
         int first_atom, int second_atom){
     for(auto bond : bonds_in_unit_cell){
@@ -312,7 +316,7 @@ std::ostream& operator<<(std::ostream& os, h_state_enum c)
 {
     switch(c)
     {
-        case h_both_enum: os << "Both Unit Cell & Border Crossing";    break;
+        case h_both_enum: os << "Both Unit Cell & Border Crossing"; break;
         case h_unit_cell_enum: os << "Unit Cell"; break;
         case h_border_crossing_enum : os << "Border Crossing";  break;
         case undefined_enum  : os << "Undefined";   break;
@@ -320,6 +324,184 @@ std::ostream& operator<<(std::ostream& os, h_state_enum c)
     }
     return os;
 }
+
+
+//Initialize the spin and site resolved density with random numbers between 0
+//and 1.
+void initSpinAndSiteResolvedDensity(Array<double>& spinAndSiteResolvedDensity){
+	srand(time(nullptr));
+	for(int spin = 0; spin < 2; spin++){
+		for(int site = 0; site < k_num_atoms; site++){
+			spinAndSiteResolvedDensity[
+				{spin, site}
+			] = (rand()%100)/100.0; //1.0;
+		}
+	}
+}
+
+//Callback function responsible for returning the current value of H_U for the
+//given indices. Since H_U is supposed to be diagonal, toIndex and fromIndex is
+//assumed to be equal and only the fromIndex is used to determine the spin and
+//site. Compare to the model specification where H_C only is passed to the
+//model with both the 'to' and 'from' indices equal.
+complex<double> H_U(const Index &toIndex, const Index &fromIndex){
+	int spin = fromIndex[1];
+	int site = fromIndex[0];
+	return U*spinAndSiteResolvedDensity[{(spin + 1)%2, site}];
+}
+
+//Adjusts the models chemical potential to fix the density. The algorithm is
+//implemented as a binary search. The density is calculated, and depending on
+//whether the density is too small or too large, the chemical potential is
+//increased or decreased, respectively. This is iterated with a doubled step
+//length until the calculation overshoots, at which point the procedure
+//continues as before, but now cutting the step in two each iteration. The
+//procedure stops once a density is found that differes from the
+//TARGET_DENSITY_PER_SITE by at most DENSITY_TOLLERANCE.
+void fixDensity(PropertyExtractor::BlockDiagonalizer &propertyExtractor){
+    double stepLength = 1;
+
+	//Get the eigenvalues.
+	Property::EigenValues eigenValues = propertyExtractor.getEigenValues();
+
+	//Perform binary search. The flags stepDirection and hasOvershot
+	//indicates in which direction the previous step was taken and whether
+	//the calculation has yet overshot. The initial step can be taken in
+	//either direction, therefore stepDirection is initialized to zero.
+	//Once the step direction has been set in the first iteration of the
+	//loop, the first change in step direction will indicate that the step
+	//has overshot the target value. At this point it is time to start
+	//halving the step size since we are in the vicinity of the target
+	//density. Before the overshot occurs, the step size is instead doubled
+	//each step to rapidly cause the overshot independently of the initial
+	//stepLength.
+	int stepDirection = 0;
+	bool hasOvershot = false;
+	while(true){
+		//Calculate the density per unit cell.
+		double densityPerUnitCell = 0;
+		for(size_t n = 0; n < model.getBasisSize(); n++){
+			densityPerUnitCell
+				+= Functions::fermiDiracDistribution(
+					eigenValues(n),
+					model.getChemicalPotential(),
+					model.getTemperature()
+				)/(model.getBasisSize()/4);
+		}
+
+		//Exit the loop if the target density is met within the given
+		//tollerance.
+		if(
+			abs(densityPerUnitCell - 2*TARGET_DENSITY_PER_SITE)
+			< DENSITY_TOLLERANCE
+		){
+            //std::cout << "Density per site: " << densityPerUnitCell << '\n';
+            //std::cout << "Final chemical potetntial: " << model.getChemicalPotential() << '\n';
+			break;
+		}
+
+		//Determine whether an overshot has occured and step the chemical
+		//potential.
+		if(densityPerUnitCell < 2*TARGET_DENSITY_PER_SITE){
+			if(stepDirection == -1)
+				hasOvershot = true;
+
+			stepDirection = 1;
+		}
+		else{
+			if(stepDirection == 1)
+				hasOvershot = true;
+
+			stepDirection = -1;
+		}
+		model.setChemicalPotential(
+			model.getChemicalPotential() + stepDirection*stepLength
+		);
+
+		//Scale the stepLength depending on whether the overshot has
+		//occurred or not.
+		if(hasOvershot)
+			stepLength /= 2.0;
+		else
+			stepLength *= 2.0;
+	}
+}
+
+
+
+//Callback function that is to be called each time the model Hamiltonian has
+//been diagonalized. The function first fixes the density to the target
+//density, then calculates the spin and site resolved density. The new spin and
+//site resolved density is mixed with the previous values to stabilize the
+//self-consistent calculation.
+bool selfConsistencyCallbackPeriodic(Solver::BlockDiagonalizer &solver){
+	PropertyExtractor::BlockDiagonalizer propertyExtractor(solver);
+
+	//Fix the density.
+	fixDensity(propertyExtractor);
+
+	//Save the old result for later comparison.
+	Array<double> oldSpinAndSiteResolvedDensity
+		= spinAndSiteResolvedDensity;
+
+	//Calculate the spin and site resolved density. Note that the k-indices
+	//are summed over using the IDX_SUM_ALL specifier, while the density is
+	//stored separately for each spin and site because of the IDX_ALL
+	//specifier.
+
+    Property::Density density = propertyExtractor.calculateDensity({
+	    {IDX_SUM_ALL, IDX_SUM_ALL, IDX_SUM_ALL, IDX_ALL, IDX_ALL}
+    });
+
+	//Update the spin and site resolved density. Mix with the previous
+	//value to stabilize the self-consistent calculation.
+    for(int spin = 0; spin < 2; spin++){
+		for(int site = 0; site < k_num_atoms_unit_cell; site++){
+			spinAndSiteResolvedDensity[{spin, site}]
+				= MIXING_PARAMETER*spinAndSiteResolvedDensity[
+					{spin, site}
+				] + (1 - MIXING_PARAMETER)*density({
+                    IDX_SUM_ALL,
+                    IDX_SUM_ALL,
+                    IDX_SUM_ALL,
+					(int)site,
+                    (int)spin
+				}); ///(model.getBasisSize()/k_num_atoms);
+		}
+	}
+
+	//Calculate the maximum difference between the new and old spin and
+	//site resolved density.
+    int max_spin {0}, max_site{0};
+	double maxDifference = 0;
+	for(int spin = 0; spin < 2; spin++){
+		for(int site = 0; site < k_num_atoms; site++){
+			double difference = abs(
+				spinAndSiteResolvedDensity[{spin, site}]
+				- oldSpinAndSiteResolvedDensity[{spin, site}]
+			);
+			if(difference > maxDifference){
+				maxDifference = difference;
+                max_spin = spin; max_site = site;
+            }
+
+		}
+	}
+
+    //std::cout << "Conv. difference:"
+                //<< std::abs(maxDifference - spin_and_site_resolved_density_tol)
+                //<< "\tabs. value: "
+                //<< spinAndSiteResolvedDensity[{max_spin, max_site}]
+                //<< "\tlocation: " << max_spin << " " << max_site << '\n';
+
+	//Return whether the spin and site resolved density has converged. The
+	//self-consistent loop will stop once true is returned.
+	if(maxDifference > spin_and_site_resolved_density_tol)
+		return false;
+	else
+		return true;
+}
+
 
 int main(int argc, char **argv) {
     string periodicity_direction { "" };
@@ -478,6 +660,11 @@ int main(int argc, char **argv) {
 	vector<vector<double>> mesh = brillouinZone.getMinorMesh(
 		numMeshPoints
 	);
+
+    Array<double> dummy_array({2, molecule.size()});
+    spinAndSiteResolvedDensity = dummy_array;
+
+    initSpinAndSiteResolvedDensity(spinAndSiteResolvedDensity);
 
     std::cout << "Not crashed yet 1" << '\n';
 	//Setup model.
@@ -674,9 +861,18 @@ int main(int argc, char **argv) {
     //Setup the solver.
 	Solver::BlockDiagonalizer solver;
 	solver.setModel(model);
-    solver.setVerbose(true);
+
+    if(hubbard){
+        solver.setSelfConsistencyCallback(selfConsistencyCallbackPeriodic);
+	    solver.setMaxIterations(1000);
+    }
+
 	solver.run();
 
+    if(hubbard){
+        std::cout << "Final chemical potential: "
+                  << model.getChemicalPotential() << '\n';
+    }
 	//Setup the property extractor.
 	PropertyExtractor::BlockDiagonalizer propertyExtractor(solver);
 	propertyExtractor.setEnergyWindow(
