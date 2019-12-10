@@ -1,0 +1,25 @@
+#=============================================================================
+VARS = input/clars_goblet.xyz -t 1.0 -b 1.7
+
+.PHONY:molecule
+molecule: all
+	./build/Application $(VARS)
+
+VARS2 = input/clars_goblet.xyz -t 1.0 -b 1.7 -H 1.8
+
+.PHONY: moleculeh
+moleculeh: all
+	./build/Application $(VARS2)
+
+VARS3 = input/gnr_8_periodic.xyz -t 2.5 -b 1.7 -p X 2.008183259
+
+.PHONY: periodic
+periodic: all
+	./build/Application $(VARS3)
+
+VARS4 = input/gnr_20_periodic.xyz -t 1.0 -b 1.7 -H 1.8 -p X 2.008183259
+
+.PHONY:periodich
+periodich: all
+	./build/Application $(VARS4)
+#=============================================================================

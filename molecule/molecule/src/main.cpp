@@ -57,12 +57,18 @@ complex<double> H_U(const Index &toIndex, const Index &fromIndex);
 std::complex<double> i(0, 1);
 double U { 0.0 };
 double spin_and_site_resolved_density_tol { 1e-5 };
-double DENSITY_TOLLERANCE { 1e-7 };
-double TARGET_DENSITY_PER_SITE { 1.0 };
-double MIXING_PARAMETER { 0.5 };
+double k_density_tolerance { 1e-7 };
+double k_target_density_per_site { 1.0 };
+double k_mixing_parameter { 0.5 };
 Model model;
-Array<double> spinAndSiteResolvedDensity;
+Array<double> spin_and_site_resolved_density;
 size_t k_num_atoms { 0 };
+
+
+ofstream scf_convergence;
+int iteration_counter = 0;
+int run = 9;
+
 
 //USAGE:     DEBUG(debug_var++);
 unsigned int debug_var = 0;
@@ -249,6 +255,10 @@ public:
         return bonds_;
     }
 
+    std::pair<int, int> get_bond_by_index(int i){
+        return bonds_[i];
+    }
+
     size_t size(){
         return bonds_.size();
     }
@@ -261,22 +271,30 @@ private:
 
 };
 
-Model create_hamiltonian(Molecule mol, Bonds bonds, complex<double> t_, bool hubbard){
+Model create_hamiltonian(Molecule mol, Bonds bonds, complex<double> t, bool hubbard){
     Model model;
     for(int s = 0; s < 2; ++s){
-        for(unsigned int i = 0; i < bonds.bonds_.size(); ++i){
-            model << HoppingAmplitude(-t_, {bonds.bonds_[i].first,s}, {bonds.bonds_[i].second,s})+HC;
+        for(unsigned int i = 0; i < bonds.size(); ++i){
+            model << HoppingAmplitude(
+                -t,
+                {bonds.get_bond_by_index(i).first, s},
+                {bonds.get_bond_by_index(i).second, s}
+            ) + HC;
         }
     }
     if(hubbard){
         for(unsigned int s = 0; s < 2; ++s){
             for(unsigned int i = 0; i < mol.size(); ++i){
-                model << HoppingAmplitude(H_U, {i, s}, {i, s});
+                model << HoppingAmplitude(
+                    H_U,
+                    {i, s},
+                    {i, s}
+                );
             }
         }
     }
     model.construct();
-	model.setTemperature(0.01);
+	model.setTemperature(0.001);
 
     std::cout << "Model size in create_hamiltonian: " << model.getBasisSize() << std::endl;
     return model;
@@ -453,13 +471,13 @@ double Postprocessor::threshold = 1e-9;
 
 //Initialize the spin and site resolved density with random numbers between 0
 //and 1.
-void initSpinAndSiteResolvedDensity(Array<double>& spinAndSiteResolvedDensity){
+void init_spin_and_site_resolved_density(Array<double>& spin_and_site_resolved_density){
 	srand(time(nullptr));
 	for(unsigned int spin = 0; spin < 2; spin++){
 		for(unsigned int site = 0; site < k_num_atoms; site++){
-			spinAndSiteResolvedDensity[
+			spin_and_site_resolved_density[
 				{spin, site}
-			] = 1.0; //(rand()%100)/100.;
+			] = (rand()%100)/100.0;
 		}
 	}
 }
@@ -472,7 +490,7 @@ void initSpinAndSiteResolvedDensity(Array<double>& spinAndSiteResolvedDensity){
 complex<double> H_U(const Index &toIndex, const Index &fromIndex){
 	unsigned int spin = fromIndex[1];
 	unsigned int site = fromIndex[0];
-	return U*spinAndSiteResolvedDensity[{(spin + 1)%2, site}];
+	return U*spin_and_site_resolved_density[{(spin + 1)%2, site}];
 }
 
 //Adjusts the models chemical potential to fix the density. The algorithm is
@@ -482,31 +500,31 @@ complex<double> H_U(const Index &toIndex, const Index &fromIndex){
 //length until the calculation overshoots, at which point the procedure
 //continues as before, but now cutting the step in two each iteration. The
 //procedure stops once a density is found that differes from the
-//TARGET_DENSITY_PER_SITE by at most DENSITY_TOLLERANCE.
+//k_target_density_per_site by at most k_density_tolerance.
 void fixDensity(PropertyExtractor::Diagonalizer &propertyExtractor){
-    double stepLength = 1;
+    double step_length = 1;
 
 	//Get the eigenvalues.
 	Property::EigenValues eigenValues = propertyExtractor.getEigenValues();
 
-	//Perform binary search. The flags stepDirection and hasOvershot
+	//Perform binary search. The flags step_direction and has_overshot
 	//indicates in which direction the previous step was taken and whether
 	//the calculation has yet overshot. The initial step can be taken in
-	//either direction, therefore stepDirection is initialized to zero.
+	//either direction, therefore step_direction is initialized to zero.
 	//Once the step direction has been set in the first iteration of the
 	//loop, the first change in step direction will indicate that the step
 	//has overshot the target value. At this point it is time to start
 	//halving the step size since we are in the vicinity of the target
 	//density. Before the overshot occurs, the step size is instead doubled
 	//each step to rapidly cause the overshot independently of the initial
-	//stepLength.
-	int stepDirection = 0;
-	bool hasOvershot = false;
+	//step_length.
+	int step_direction = 0;
+	bool has_overshot = false;
 	while(true){
 		//Calculate the density per unit cell.
-		double densityPerUnitCell = 0;
+		double density_per_unit_cell = 0;
 		for(int n = 0; n < model.getBasisSize(); n++){
-			densityPerUnitCell
+			density_per_unit_cell
 				+= Functions::fermiDiracDistribution(
 					eigenValues(n),
 					model.getChemicalPotential(),
@@ -515,42 +533,41 @@ void fixDensity(PropertyExtractor::Diagonalizer &propertyExtractor){
 		}
 
 		//Exit the loop if the target density is met within the given
-		//tollerance.
+		//tolerance.
 		if(
-			abs(densityPerUnitCell - 2*TARGET_DENSITY_PER_SITE)
-			< DENSITY_TOLLERANCE
+			abs(density_per_unit_cell - 2*k_target_density_per_site)
+			< k_density_tolerance
 		){
-            //std::cout << "Density per site: " << densityPerUnitCell << '\n';
+            //std::cout << "Density per site: " << density_per_unit_cell << '\n';
             //std::cout << "Final chemical potetntial: " << model.getChemicalPotential() << '\n';
 			break;
 		}
 
 		//Determine whether an overshot has occured and step the chemical
 		//potential.
-		if(densityPerUnitCell < 2*TARGET_DENSITY_PER_SITE){
-			if(stepDirection == -1)
-				hasOvershot = true;
-
-			stepDirection = 1;
+		if(density_per_unit_cell < 2*k_target_density_per_site){
+			if(step_direction == -1){
+				has_overshot = true;
+            }
+			step_direction = 1;
 		}
 		else{
-			if(stepDirection == 1)
-				hasOvershot = true;
-
-			stepDirection = -1;
+			if(step_direction == 1){
+				has_overshot = true;
+            }
+			step_direction = -1;
 		}
 		model.setChemicalPotential(
-			model.getChemicalPotential() + stepDirection*stepLength
+			model.getChemicalPotential() + step_direction*step_length
 		);
 
-
-		//Scale the stepLength depending on whether the overshot has
-		//occurred or not.
-		if(hasOvershot)
-			stepLength /= 2.0;
-		else
-			stepLength *= 2.0;
-	}
+		if(has_overshot){
+			step_length /= 2.0;
+        }
+		else{
+			step_length *= 2.0;
+	    }
+    }
 }
 
 //Callback function that is to be called each time the model Hamiltonian has
@@ -558,15 +575,13 @@ void fixDensity(PropertyExtractor::Diagonalizer &propertyExtractor){
 //density, then calculates the spin and site resolved density. The new spin and
 //site resolved density is mixed with the previous values to stabilize the
 //self-consistent calculation.
-bool selfConsistencyCallback(Solver::Diagonalizer &solver){
+bool self_consistency_callback(Solver::Diagonalizer &solver){
 	PropertyExtractor::Diagonalizer propertyExtractor(solver);
 
-	//Fix the density.
 	fixDensity(propertyExtractor);
 
-	//Save the old result for later comparison.
-	Array<double> oldSpinAndSiteResolvedDensity
-		= spinAndSiteResolvedDensity;
+	Array<double> old_spin_and_site_resolved_density
+		= spin_and_site_resolved_density;
 
 	//Calculate the spin and site resolved density. Note that the k-indices
 	//are summed over using the IDX_SUM_ALL specifier, while the density is
@@ -580,12 +595,12 @@ bool selfConsistencyCallback(Solver::Diagonalizer &solver){
 	//value to stabilize the self-consistent calculation.
 	for(unsigned int spin = 0; spin < 2; spin++){
 		for(unsigned int site = 0; site < k_num_atoms; site++){
-			spinAndSiteResolvedDensity[{spin, site}]
-				= MIXING_PARAMETER*spinAndSiteResolvedDensity[
+			spin_and_site_resolved_density[{spin, site}]
+				= k_mixing_parameter*spin_and_site_resolved_density[
 					{spin, site}
-				] + (1 - MIXING_PARAMETER)*density({
-					(int)site,
-                    (int)spin
+				] + (1 - k_mixing_parameter)*density({
+					static_cast<int>(site),
+                    static_cast<int>(spin)
 				});///(model.getBasisSize()/k_num_atoms);
 		}
 	}
@@ -593,30 +608,31 @@ bool selfConsistencyCallback(Solver::Diagonalizer &solver){
 	//Calculate the maximum difference between the new and old spin and
 	//site resolved density.
     unsigned int max_spin {0}, max_site{0};
-	double maxDifference = 0;
+	double max_difference = 0;
 	for(unsigned int spin = 0; spin < 2; spin++){
 		for(unsigned int site = 0; site < k_num_atoms; site++){
 			double difference = abs(
-				spinAndSiteResolvedDensity[{spin, site}]
-				- oldSpinAndSiteResolvedDensity[{spin, site}]
+				spin_and_site_resolved_density[{spin, site}]
+				- old_spin_and_site_resolved_density[{spin, site}]
 			);
-			if(difference > maxDifference){
-				maxDifference = difference;
+			if(difference > max_difference){
+				max_difference = difference;
                 max_spin = spin; max_site = site;
             }
-
 		}
 	}
 
-    //std::cout << "Conv. difference:"
-                //<< std::abs(maxDifference - spin_and_site_resolved_density_tol)
-                //<< "\tabs. value: "
-                //<< spinAndSiteResolvedDensity[{max_spin, max_site}]
-                //<< "\tlocation: " << max_spin << " " << max_site << '\n';
+    scf_convergence << run << "," << iteration_counter++ << ",";
+    scf_convergence << std::abs(max_difference - spin_and_site_resolved_density_tol) << std::endl;
+    // std::cout << "Conv. difference:"
+    //             << std::abs(max_difference - spin_and_site_resolved_density_tol)
+    //             << "\tabs. value: "
+    //             << spin_and_site_resolved_density[{max_spin, max_site}]
+    //             << "\tlocation: " << max_spin << " " << max_site << '\n';
 
 	//Return whether the spin and site resolved density has converged. The
 	//self-consistent loop will stop once true is returned.
-	if(maxDifference > spin_and_site_resolved_density_tol)
+	if(max_difference > spin_and_site_resolved_density_tol)
 		return false;
 	else
 		return true;
@@ -628,7 +644,9 @@ int main(int argc, char *argv[]){
     complex<double> t { 1.0 };
     double threshold { 1.7 };
     bool hubbard { false };
-    //double h_u { 0.0 };
+
+    scf_convergence.open("scf_convergence.txt");
+    //scf_convergence << "run,iteration,error" << std::endl;
 
     if(argc == 1){
         std::cout << "You need to provide at least a file." << '\n';
@@ -688,9 +706,9 @@ int main(int argc, char *argv[]){
     //bonds.print_hoppings();
 
     Array<double> dummy_array({2, example_mol.size()});
-    spinAndSiteResolvedDensity = dummy_array;
+    spin_and_site_resolved_density = dummy_array;
 
-    initSpinAndSiteResolvedDensity(spinAndSiteResolvedDensity);
+    init_spin_and_site_resolved_density(spin_and_site_resolved_density);
 
 
     model = create_hamiltonian(example_mol, bonds, t, hubbard);
@@ -699,12 +717,12 @@ int main(int argc, char *argv[]){
 	Solver::Diagonalizer solver;
 	solver.setModel(model);
     if(hubbard){
-        solver.setSelfConsistencyCallback(selfConsistencyCallback);
+        solver.setSelfConsistencyCallback(self_consistency_callback);
 	    solver.setMaxIterations(1000);
     }
 	//Run the solver. This will run a self-consistent loop where the
 	//Hamiltonian first is diagonalized, and then the
-	//selfConsistencyCallback is called. The procedure is repeated until
+	//self_consistency_callback is called. The procedure is repeated until
 	//either the self-consistency callback returns true, or the maximum
 	//number of iterations is reached.
 	solver.run();
@@ -713,15 +731,8 @@ int main(int argc, char *argv[]){
 	//Create PropertyExtractor
 	PropertyExtractor::Diagonalizer pe(solver);
 
-	//Setup energy window
-	const double k_lower_bound = -5.0;
-	const double k_upper_bound = 5.0;
-	const int k_resolution = 1000;
-	pe.setEnergyWindow(k_lower_bound, k_upper_bound, k_resolution);
-
     auto eigen_vectors = solver.getEigenVectors();
 	auto eigen_values = solver.getEigenValues();
-
 
 	int basisSize = model.getBasisSize();
 	ofstream myfile;
@@ -750,8 +761,6 @@ int main(int argc, char *argv[]){
         processed_data << processor_down.stringyfy() << "\n";
     }
 
-
-
     std::cout << "Writing done." << '\n';
     return 0;
 }
@@ -766,8 +775,8 @@ void print_help(bool full){
         printf("/**********************************************************************/\n");
         printf("\n");
     }
-    printf("Usage: \n./Application molecule.xyz [parameters]\nParameters:\n");
-    printf("  -p or --periodic \t\t- sets the periodicity direction and distance, two parameters needed [X, Y, Z] and [distance]\n");
+    printf("Usage: \n./Application molecule.xyz [parameters]\nPossible parameters:\n");
+    printf("  -p or --periodic \t\t- sets the periodicity direction and distance, two parameters needed [X, Y, Z] and [distance].\n Currently only X-direction is supported.");
     printf("  -t or --hopping_amplitude \t- sets the Hamiltonian parameter t value (Hopping amplitude), default is 1.0\n");
     printf("  -b or --bond_threshold \t- sets the bond threshold in Ångström\n");
     printf("  -H or --Hubbard \t\t- sets the Hamiltonian parameter U, default is 0.0 \n");
