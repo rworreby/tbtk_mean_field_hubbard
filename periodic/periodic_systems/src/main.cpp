@@ -1,6 +1,5 @@
 // c++ xyz_periodic_handler.cpp -o main && ./main gnr_7_periodic -p X 4.26 -t 1.8
 // ./build/Application gnr_7_periodic.xyz -p X 4.26 -t 1.8
-                - molecule.get_x_coords(bond.first-first_is_odd);
 
 #include <algorithm> //std::sort()
 #include <complex>
@@ -565,33 +564,19 @@ int main(int argc, char **argv) {
     whole_molecule.construct_molecule_from_file(in);
 
     std::vector<int> atoms_in_unit_cell;
-<<<<<<< HEAD
-    std::vector<int> atoms_on_unit_cell_border;
-    double x_min = molecule.get_x_min();
-    double x_max = molecule.get_x_min() + periodicity_distance;
-=======
     double x_min = whole_molecule.get_x_min();
     double x_max = whole_molecule.get_x_min() + periodicity_distance;
->>>>>>> periodic_hubbard_new
 
     for(size_t i = 0; i < whole_molecule.size(); ++i){
         double mol_x_coord = whole_molecule.get_x_coords(i);
         if(mol_x_coord + k_eps < x_max && mol_x_coord >= x_min - k_eps){
             atoms_in_unit_cell.push_back(i);
-            if(mol_x_coord < x_min + 0.1 || mol_x_coord > x_max - 1.5){
-                atoms_on_unit_cell_border.push_back(i);
-            }
         }
     }
 
     std::cout << "Selected atom in unit cell: " << '\n';
     for(size_t j = 0; j < atoms_in_unit_cell.size(); ++j){
         std::cout << atoms_in_unit_cell[j] << " ";
-    }
-    std::cout << '\n';
-    std::cout << "Selected atom at unit cell border: " << '\n';
-    for(size_t j = 0; j < atoms_on_unit_cell_border.size(); ++j){
-        std::cout << atoms_on_unit_cell_border[j] << " ";
     }
     std::cout << '\n';
 
@@ -685,53 +670,13 @@ int main(int argc, char **argv) {
 	//Setup model.
 	//model = create_hamiltonian(molecule, bonds, t, hubbard);
 
-<<<<<<< HEAD
-
-    std::cout << "mesh size: " << mesh.size() << '\n';
-=======
     std::cout << "mesh size: " << mesh.size() << '\n' << '\n' << '\n';
->>>>>>> periodic_hubbard_new
     for(unsigned int m = 0; m < mesh.size(); m++){
         Index kIndex = brillouinZone.getMinorCellIndex(
             mesh[m],
             numMeshPoints
         );
 
-<<<<<<< HEAD
-        //y:mesh[m][1]
-        Vector3d k({mesh[m][0], mesh[m][1], mesh[m][2]});
-
-        /**
-        if (m < 10) {
-            std::cout << "Values of h / t to neighboring atoms: " << std::endl;
-            std::cout << "Straight interaction: " << exp(-i*Vector3d::dotProduct(k, r_AB[0])) << '\n';
-            std::cout << "Diagnoal interaction 1: " << exp(-i*Vector3d::dotProduct(k, r_AB[1])) << '\n';
-            std::cout << "Diagnoal interaction 2: " << exp(-i*Vector3d::dotProduct(k, r_AB[2])) << '\n';
-            std::cout << "Diagnoal interaction tot: " << exp(-i*Vector3d::dotProduct(k, r_AB[1])) + exp(-i*Vector3d::dotProduct(k, r_AB[2])) << '\n';
-        }
-        **/
-
-
-        // TODO: change to hopping 1 in unit cell / phase shift to atoms in neighboring cell
-        complex<double> h_straight = -t * exp(-i*Vector3d::dotProduct(k, r_AB[0]));
-        //std::cout << "h_straight: " << h_straight << '\n';
-        complex<double> h_diag = -t * (exp(-i*Vector3d::dotProduct(k, r_AB[1]))
-             + exp(-i*Vector3d::dotProduct(k, r_AB[2])));
-        //std::cout << "h_diag: " << h_diag << '\n';
-        //PRINTVAR(exp(-i*Vector3d::dotProduct(k, r_AB[1])));
-        //PRINTVAR(exp(-i*Vector3d::dotProduct(k, r_AB[2])));
-
-        for(auto unit_cell_bond : bonds_in_unit_cell){
-            bool aligned_atoms = check_straight_bond_orientation(
-                molecule.get_x_coords(unit_cell_bond.first),
-                molecule.get_x_coords(unit_cell_bond.second),
-                molecule.get_y_coords(unit_cell_bond.first),
-                molecule.get_y_coords(unit_cell_bond.second)
-            );
-            complex<double> h = h_diag;
-            if(aligned_atoms){
-                h = h_straight;
-=======
         Vector3d kmesh({mesh[m][0], mesh[m][1], mesh[m][2]});
 
         complex<double> one(1, 0);
@@ -808,8 +753,8 @@ int main(int argc, char **argv) {
                     }
 
                     Vector3d second_dist_vec({second_x_diff, second_y_diff, 0});
-
-                    h = -t * (exp(-i*Vector3d::dotProduct(kmesh, dist_vec)) + exp(-i*Vector3d::dotProduct(kmesh, second_dist_vec)));
+                    h = -t * (one + exp(-i*Vector3d::dotProduct(kmesh, k_orig[0])));
+                    // h = -t * (exp(-i*Vector3d::dotProduct(kmesh, dist_vec)) + exp(-i*Vector3d::dotProduct(kmesh, second_dist_vec)));
                     h_state = h_both_enum;
                     if(printer > comp_val && printer < comp_val + 3){
                         std::cout << "h both is: " << h << '\n';
@@ -823,7 +768,7 @@ int main(int argc, char **argv) {
                             std::cout << "Spec Border hopping distance vector between atoms ("
                             << (bond.first - 1) << ", " << bond.second << "): "
                             << dist_vec << '\n';
-                        h = -t * exp(-i*Vector3d::dotProduct(kmesh, dist_vec));
+                        h = -t * exp(-i*Vector3d::dotProduct(kmesh, k_orig[0]));
                         if(printer == comp_val){
                             std::cout << "h for spec border hopping:" << h << '\n';
                             std::cout << "Comparing dist vec with minus dist vec:"
@@ -842,7 +787,7 @@ int main(int argc, char **argv) {
                 double x_diff_test = molecule.get_x_coords(first_atom - first_is_odd) - molecule.get_x_coords(second_atom - (1-first_is_odd));
                 double y_diff_test = molecule.get_y_coords(first_atom - first_is_odd) - molecule.get_y_coords(second_atom - (1-first_is_odd));
                 Vector3d dist_vec_test({x_diff_test, y_diff_test, 0});
-                h = -t * (one + exp(-i*Vector3d::dotProduct(kmesh, dist_vec_test)));
+                h = -t * (exp(-i*Vector3d::dotProduct(kmesh, dist_vec_test)));
                 model << HoppingAmplitude(
         			h,
         			{kIndex[0], kIndex[1], kIndex[2], (first_atom - first_is_odd)},
@@ -902,7 +847,6 @@ int main(int argc, char **argv) {
                     if(h_state = h_border_crossing_enum)
                         std::cout << "CALLED BORDER CROSSING FROM 3" << '\n';
                 }
->>>>>>> periodic_hubbard_new
             }
 
             h_state = undefined_enum;
@@ -943,9 +887,12 @@ int main(int argc, char **argv) {
 
     std::cout << "Not crashed yet 3" << '\n';
 
+    std::cout << "MPI: " << M_PI << '\n';
     Vector3d lowest({-M_PI / periodicity_distance, 0, 0});
     Vector3d highest({M_PI / periodicity_distance, 0, 0});
 
+    std::cout << "lowest:" << lowest << '\n';
+    std::cout << "periodicity_distance:" << periodicity_distance << '\n';
     std::cout << "Not crashed yet 3.1" << '\n';
 
     vector<vector<Vector3d>> paths = {

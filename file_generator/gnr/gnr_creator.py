@@ -3,8 +3,8 @@ import numpy as np
 #x = np.array()
 atoms = []
 
-band_thickness = 9 #thickness of gnr
-band_length = 1
+band_thickness = 7 #thickness of gnr
+band_length = 2
 
 minor_atoms = int((band_thickness-1)/2)
 major_atoms = int((band_thickness+1)/2)
@@ -34,7 +34,7 @@ for i in range(band_length):
     x += half_reg_dist
     y = 0
 
-    for i in range(major_atoms):
+    for i in range(major_atoms-1):
         atoms += {x}
         atoms += {y}
         alt_x = x + reg_dist
