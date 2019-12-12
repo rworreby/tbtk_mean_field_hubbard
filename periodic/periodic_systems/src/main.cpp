@@ -615,7 +615,7 @@ int main(int argc, char **argv) {
     r[2] = Vector3d({0, 0, periodicity_distance});
 
     std::cout << "Not crashed yet -2" << '\n';
-
+    std::cout << "periodicity_distance: " << periodicity_distance << '\n';
     // Calculate the reciprocal lattice vectors.
     Vector3d r_AB[3];
     r_AB[0] = (r[0] + 2*r[1])/3.;
@@ -623,10 +623,6 @@ int main(int argc, char **argv) {
 	r_AB[2] = -r[0] - r[1] + r_AB[0];
 
     PRINTVAR(r_AB[0]); PRINTVAR(r_AB[1]); PRINTVAR(r_AB[2]);
-
-    r[1] = Vector3d({0,	periodicity_distance,	0});
-    r[1] = Vector3d({0,	periodicity_distance,	0});
-    r[2] = Vector3d({0,	0, periodicity_distance});
 
 
     // TODO: Compare r_AB to distance vectors computed below.
@@ -637,6 +633,9 @@ int main(int argc, char **argv) {
 			Vector3d::dotProduct(r[n], r[(n+1)%3]*r[(n+2)%3])
 		);
 	}
+
+    r[1] = Vector3d({0,	periodicity_distance, 0});
+
 
     std::cout << "Not crashed yet -1" << '\n';
 
@@ -679,7 +678,7 @@ int main(int argc, char **argv) {
 
         Vector3d kmesh({mesh[m][0], mesh[m][1], mesh[m][2]});
 
-        complex<double> one(1, 0);
+        const complex<double> one(1, 0);
         // complex<double> h_unit_cell = -t;
         // complex<double> h_border_crossing = -t * exp(-i*Vector3d::dotProduct(kmesh, k_orig[0]/3.0));
         // complex<double> h_both = -t * (one + exp(-i*Vector3d::dotProduct(kmesh, k_orig[0])));
@@ -708,7 +707,7 @@ int main(int argc, char **argv) {
             }
             Vector3d dist_vec({x_diff, y_diff, 0});
 
-            h = -t * exp(-i*Vector3d::dotProduct(kmesh, dist_vec));
+            h = -t * exp(-i*Vector3d::dotProduct(kmesh, k_orig[0]));
             if(printer == comp_val)
                 std::cout << "h for original bond: " << h << '\n';
 
