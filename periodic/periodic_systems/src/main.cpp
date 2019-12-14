@@ -3,6 +3,7 @@
 
 #include <algorithm> //std::sort()
 #include <complex>
+#include <cmath>
 #include <cstring>
 #include <cstdlib>
 #include <fstream>
@@ -549,19 +550,20 @@ int main(int argc, char **argv) {
 	UnitHandler::setScales({"1 C", "1 pcs", "1 eV", "1 Ao", "1 K", "1 s"});
 
     size_t BRILLOUIN_ZONE_RESOLUTION = 1000;
-	const int K_POINTS_PER_PATH = BRILLOUIN_ZONE_RESOLUTION/10;
+	const int K_POINTS_PER_PATH = BRILLOUIN_ZONE_RESOLUTION;
 	vector<unsigned int> numMeshPoints = {
-		BRILLOUIN_ZONE_RESOLUTION,
+		K_POINTS_PER_PATH,
         1,
         1
 	};
 	const size_t ENERGY_RESOLUTION = 1000;
-	const double ENERGY_LOWER_BOUND = -10;
-	const double ENERGY_UPPER_BOUND = 10;
+	const double ENERGY_LOWER_BOUND = -20;
+	const double ENERGY_UPPER_BOUND = 20;
 
     Molecule whole_molecule;
     // Add molecules from xyz file
     whole_molecule.construct_molecule_from_file(in);
+    std::cout << whole_molecule << std::endl;
 
     std::vector<int> atoms_in_unit_cell;
     double x_min = whole_molecule.get_x_min();
@@ -617,16 +619,21 @@ int main(int argc, char **argv) {
     std::cout << "Not crashed yet -2" << '\n';
     std::cout << "periodicity_distance: " << periodicity_distance << '\n';
     // Calculate the reciprocal lattice vectors.
+
+    /**
     Vector3d r_AB[3];
     r_AB[0] = (r[0] + 2*r[1])/3.;
 	r_AB[1] = -r[1] + r_AB[0];
 	r_AB[2] = -r[0] - r[1] + r_AB[0];
 
     PRINTVAR(r_AB[0]); PRINTVAR(r_AB[1]); PRINTVAR(r_AB[2]);
-
+    **/
 
     // TODO: Compare r_AB to distance vectors computed below.
 
+    r[1] = Vector3d({0,	periodicity_distance, 0});
+
+    PRINTVAR(r[0]); PRINTVAR(r[1]); PRINTVAR(r[2]);
     Vector3d k_orig[3];
 	for(unsigned int n = 0; n < 3; n++){
 		k_orig[n] = 2*M_PI*r[(n+1)%3]*r[(n+2)%3]/(
@@ -634,8 +641,7 @@ int main(int argc, char **argv) {
 		);
 	}
 
-    r[1] = Vector3d({0,	periodicity_distance, 0});
-
+    PRINTVAR(k_orig[0]); PRINTVAR(k_orig[1]); PRINTVAR(k_orig[2]);
 
     std::cout << "Not crashed yet -1" << '\n';
 
@@ -670,6 +676,7 @@ int main(int argc, char **argv) {
 	//model = create_hamiltonian(molecule, bonds, t, hubbard);
 
     std::cout << "mesh size: " << mesh.size() << '\n' << '\n' << '\n';
+    std::cout << "Printing debug messages for m = 3:" << '\n';
     for(unsigned int m = 0; m < mesh.size(); m++){
         Index kIndex = brillouinZone.getMinorCellIndex(
             mesh[m],
@@ -691,25 +698,26 @@ int main(int argc, char **argv) {
             bool first_is_odd = true;
             complex<double> h;
 
-            double x_diff {
-                molecule.get_x_coords(bond.second)
-                - molecule.get_x_coords(bond.first)
-            };
-            double y_diff {
-                molecule.get_y_coords(bond.second)
-                - molecule.get_y_coords(bond.first)
-            };
+            // double x_diff {
+            //     molecule.get_x_coords(bond.second)
+            //     - molecule.get_x_coords(bond.first)
+            // };
+            // double y_diff {
+            //     molecule.get_y_coords(bond.second)
+            //     - molecule.get_y_coords(bond.first)
+            // };
+            //
+            // if(printer == comp_val){
+            //     std::cout << "Distance Vector between atoms " << bond.first
+            //               << ", " << bond.second << " in original bond: ("
+            //               << x_diff << ", " << y_diff << ", 0)" << '\n';
+            // }
+            // Vector3d dist_vec({x_diff, y_diff, 0});
 
-            if(printer == comp_val){
-                std::cout << "Distance Vector between atoms " << bond.first
-                          << ", " << bond.second << " in original bond: ("
-                          << x_diff << ", " << y_diff << ", 0)" << '\n';
-            }
-            Vector3d dist_vec({x_diff, y_diff, 0});
-
-            h = -t * exp(-i*Vector3d::dotProduct(kmesh, k_orig[0]));
-            if(printer == comp_val)
-                std::cout << "h for original bond: " << h << '\n';
+            //h = -t * exp(-i*Vector3d::dotProduct(kmesh, r[0]));
+            h = -t * one;
+            // if(printer == comp_val)
+            //     std::cout << "h for original bond: " << h << '\n';
 
             if((bond.first + bond.second) % 2 == 0){
                 if(bond_is_in_unit_cell(bonds_in_unit_cell,
@@ -733,49 +741,50 @@ int main(int argc, char **argv) {
                         bond.first-first_is_odd, bond.second-(1-first_is_odd))){
                     double second_x_diff { 0.0 };
                     double second_y_diff { 0.0 };
-                    if(first_is_odd){
-                        second_x_diff =
-                            molecule.get_x_coords(bond.first-first_is_odd)
-                            - molecule.get_x_coords(bond.second-(1-first_is_odd));
-                        second_y_diff =
-                            molecule.get_y_coords(bond.first-first_is_odd)
-                            - molecule.get_y_coords(bond.second-(1-first_is_odd));
-                    }
-                    else{
-                        second_x_diff =
-                            molecule.get_x_coords(bond.second-(1-first_is_odd))
-                            - molecule.get_x_coords(bond.first-first_is_odd);
-
-                        second_y_diff =
-                            molecule.get_y_coords(bond.second-(1-first_is_odd))
-                            - molecule.get_y_coords(bond.first-first_is_odd);
-                    }
-
-                    Vector3d second_dist_vec({second_x_diff, second_y_diff, 0});
-                    h = -t * (one + exp(-i*Vector3d::dotProduct(kmesh, k_orig[0])));
+                    // if(first_is_odd){
+                    //     second_x_diff =
+                    //         molecule.get_x_coords(bond.first-first_is_odd)
+                    //         - molecule.get_x_coords(bond.second-(1-first_is_odd));
+                    //     second_y_diff =
+                    //         molecule.get_y_coords(bond.first-first_is_odd)
+                    //         - molecule.get_y_coords(bond.second-(1-first_is_odd));
+                    // }
+                    // else{
+                    //     second_x_diff =
+                    //         molecule.get_x_coords(bond.second-(1-first_is_odd))
+                    //         - molecule.get_x_coords(bond.first-first_is_odd);
+                    //
+                    //     second_y_diff =
+                    //         molecule.get_y_coords(bond.second-(1-first_is_odd))
+                    //         - molecule.get_y_coords(bond.first-first_is_odd);
+                    // }
+                    //
+                    // Vector3d second_dist_vec({second_x_diff, second_y_diff, 0});
+                    h = -t * (one + exp(-i*Vector3d::dotProduct(kmesh, r[0])));
                     // h = -t * (exp(-i*Vector3d::dotProduct(kmesh, dist_vec)) + exp(-i*Vector3d::dotProduct(kmesh, second_dist_vec)));
                     h_state = h_both_enum;
-                    if(printer > comp_val && printer < comp_val + 3){
-                        std::cout << "h both is: " << h << '\n';
-                        std::cout << "dist vec: " << dist_vec << '\n';
-                        std::cout << "dist vec2: " << second_dist_vec << '\n';
-                    }
+                    // if(printer > comp_val && printer < comp_val + 3){
+                    //     std::cout << "h both is: " << h << '\n';
+                    //     std::cout << "dist vec: " << dist_vec << '\n';
+                    //     std::cout << "dist vec2: " << second_dist_vec << '\n';
+                    // }
                 }
                 else{
                     if(first_is_odd){
-                        if(printer == comp_val)
-                            std::cout << "Spec Border hopping distance vector between atoms ("
-                            << (bond.first - 1) << ", " << bond.second << "): "
-                            << dist_vec << '\n';
-                        h = -t * exp(-i*Vector3d::dotProduct(kmesh, k_orig[0]));
-                        if(printer == comp_val){
-                            std::cout << "h for spec border hopping:" << h << '\n';
-                            std::cout << "Comparing dist vec with minus dist vec:"
-                                      << -t * exp(-i*Vector3d::dotProduct(kmesh, dist_vec))
-                                      << " against "
-                                      << -t * exp(-i*Vector3d::dotProduct(kmesh, -dist_vec))
-                                      << '\n';
-                        }
+                        // if(printer == comp_val){
+                        //     std::cout << "Spec Border hopping distance vector between atoms ("
+                        //     << (bond.first - 1) << ", " << bond.second << "): "
+                        //     << dist_vec << '\n';
+                        // }
+                        h = -t * exp(-i*Vector3d::dotProduct(kmesh, r[0]));
+                        // if(printer == comp_val){
+                        //     std::cout << "h for spec border hopping:" << h << '\n';
+                        //     std::cout << "Comparing dist vec with minus dist vec:"
+                        //               << -t * exp(-i*Vector3d::dotProduct(kmesh, dist_vec))
+                        //               << " against "
+                        //               << -t * exp(-i*Vector3d::dotProduct(kmesh, -dist_vec))
+                        //               << '\n';
+                        // }
                     }
                     h_state = h_border_crossing_enum;
                 }
@@ -783,10 +792,10 @@ int main(int argc, char **argv) {
             int first_atom { bond.first };
             int second_atom { bond.second };
             if(h_state == h_border_crossing_enum){
-                double x_diff_test = molecule.get_x_coords(first_atom - first_is_odd) - molecule.get_x_coords(second_atom - (1-first_is_odd));
-                double y_diff_test = molecule.get_y_coords(first_atom - first_is_odd) - molecule.get_y_coords(second_atom - (1-first_is_odd));
-                Vector3d dist_vec_test({x_diff_test, y_diff_test, 0});
-                h = -t * (exp(-i*Vector3d::dotProduct(kmesh, dist_vec_test)));
+                // double x_diff_test = molecule.get_x_coords(first_atom - first_is_odd) - molecule.get_x_coords(second_atom - (1-first_is_odd));
+                // double y_diff_test = molecule.get_y_coords(first_atom - first_is_odd) - molecule.get_y_coords(second_atom - (1-first_is_odd));
+                // Vector3d dist_vec_test({x_diff_test, y_diff_test, 0});
+                h = -t * exp(-i*Vector3d::dotProduct(kmesh, r[0]));
                 model << HoppingAmplitude(
         			h,
         			{kIndex[0], kIndex[1], kIndex[2], (first_atom - first_is_odd)},
@@ -890,9 +899,14 @@ int main(int argc, char **argv) {
     Vector3d lowest({-M_PI / periodicity_distance, 0, 0});
     Vector3d highest({M_PI / periodicity_distance, 0, 0});
 
-    std::cout << "lowest:" << lowest << '\n';
-    std::cout << "periodicity_distance:" << periodicity_distance << '\n';
-    std::cout << "Not crashed yet 3.1" << '\n';
+    double x_diff_test = whole_molecule.get_x_coords(0)
+            - whole_molecule.get_x_coords(1);
+    double y_diff_test = whole_molecule.get_y_coords(0)
+            - whole_molecule.get_y_coords(1);
+    Vector3d dist_vec_test({x_diff_test, y_diff_test, 0});
+    std::cout << "Distance between atoms: " << dist_vec_test << '\n';
+    std::cout << "K Space: " << lowest.x << " to " << highest.x << '\n';
+    std::cout << "Periodicity of molecule: " << periodicity_distance << '\n';
 
     vector<vector<Vector3d>> paths = {
         {lowest, highest}
@@ -900,7 +914,6 @@ int main(int argc, char **argv) {
 
     std::cout << "Not crashed yet 3.2" << '\n';
 
-    //Calculate the band structure along the path Gamma -> M -> K -> Gamma.
 	//Array<double> bandStructure({K_POINTS_PER_PATH}, 0);
 	Range interpolator(0, 1, K_POINTS_PER_PATH);
 
@@ -933,7 +946,7 @@ int main(int argc, char **argv) {
 
 			Index kIndex = brillouinZone.getMinorCellIndex(
 				{k.x, k.y, k.z},
-				numMeshPoints
+                numMeshPoints
 			);
 
             //std::cout << "Not crashed yet 5" << '\n';
