@@ -127,11 +127,8 @@ public:
         getline(in, n_atom);
         std::cout << "Number of atoms in file: " << n_atom << '\n';
 
-        //Read comment line here and parse:
         std::string comment_line;
         getline(in, comment_line);
-
-        //in.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
         Atom atom;
         while (in >> atom) {
@@ -140,8 +137,7 @@ public:
             val_x.push_back(atom.name_coords_.xyz.x);
             val_y.push_back(atom.name_coords_.xyz.y);
         }
-
-        set_min_max_x();
+        set_min_max();
     }
 
     void construct_molecule_from_indexlist(Molecule other_mol,
@@ -156,33 +152,24 @@ public:
             val_x.push_back(other_mol.atoms_[index].name_coords_.xyz.x);
             val_y.push_back(other_mol.atoms_[index].name_coords_.xyz.y);
         }
-        set_min_max_x();
+        set_min_max();
     }
 
-    double find_unit_cell_size(){
-        double max_val=0, min_val=0;
-        std::vector<double> temp_y = val_y;
-        comperator_t compFunctor = [](double elem1, double elem2){
-				return elem1 < elem2;
-		};
-        std::sort(temp_y.begin(), temp_y.end(), compFunctor);
-
-        min_y = min_val = temp_y[0];
-        max_y = max_val = temp_y[temp_y.size()-1];
-
-        return max_val - min_val;
-    }
-
-    void set_min_max_x(){
-        double max_val=0, min_val=0;
+    void set_min_max(){
         std::vector<double> temp_x = val_x;
         comperator_t compFunctor = [](double elem1, double elem2){
 				return elem1 < elem2;
 		};
         std::sort(temp_x.begin(), temp_x.end(), compFunctor);
 
-        min_x = min_val = temp_x[0];
-        max_x = max_val = temp_x[temp_x.size()-1];
+        min_x = temp_x[0];
+        max_x = temp_x[temp_x.size()-1];
+
+        std::vector<double> temp_y = val_y;
+        std::sort(temp_y.begin(), temp_y.end(), compFunctor);
+
+        min_y = temp_y[0];
+        max_y = temp_y[temp_y.size()-1];
     }
 
     size_t size(){
@@ -207,6 +194,12 @@ public:
     }
     double get_x_min(){
         return min_x;
+    }
+    double get_y_max(){
+        return max_y;
+    }
+    double get_y_min(){
+        return min_y;
     }
 
 private:
@@ -330,8 +323,8 @@ std::ostream& operator<<(std::ostream& os, h_state_enum c)
 //and 1.
 void initSpinAndSiteResolvedDensity(Array<double>& spinAndSiteResolvedDensity){
 	srand(time(nullptr));
-	for(int spin = 0; spin < 2; spin++){
-		for(int site = 0; site < k_num_atoms; site++){
+	for(unsigned int spin = 0; spin < 2; spin++){
+		for(unsigned int site = 0; site < k_num_atoms; site++){
 			spinAndSiteResolvedDensity[
 				{spin, site}
 			] = (rand()%100)/100.0; //1.0;
@@ -345,7 +338,7 @@ void initSpinAndSiteResolvedDensity(Array<double>& spinAndSiteResolvedDensity){
 //site. Compare to the model specification where H_C only is passed to the
 //model with both the 'to' and 'from' indices equal.
 complex<double> H_U(const Index &toIndex, const Index &fromIndex){
-	int spin = fromIndex[1];
+	unsigned int spin = fromIndex[1];
 	int site = fromIndex[0];
 	return U*spinAndSiteResolvedDensity[{(spin + 1)%2, site}];
 }
@@ -455,7 +448,7 @@ bool selfConsistencyCallbackPeriodic(Solver::BlockDiagonalizer &solver){
 
 	//Update the spin and site resolved density. Mix with the previous
 	//value to stabilize the self-consistent calculation.
-    for(int spin = 0; spin < 2; spin++){
+    for(unsigned int spin = 0; spin < 2; spin++){
 		for(int site = 0; site < k_num_atoms_unit_cell; site++){
 			spinAndSiteResolvedDensity[{spin, site}]
 				= MIXING_PARAMETER*spinAndSiteResolvedDensity[
@@ -464,8 +457,8 @@ bool selfConsistencyCallbackPeriodic(Solver::BlockDiagonalizer &solver){
                     IDX_SUM_ALL,
                     IDX_SUM_ALL,
                     IDX_SUM_ALL,
-					(int)site,
-                    (int)spin
+					(int)spin,
+                    (int)site
 				}); ///(model.getBasisSize()/k_num_atoms);
 		}
 	}
@@ -474,7 +467,7 @@ bool selfConsistencyCallbackPeriodic(Solver::BlockDiagonalizer &solver){
 	//site resolved density.
     int max_spin {0}, max_site{0};
 	double maxDifference = 0;
-	for(int spin = 0; spin < 2; spin++){
+	for(unsigned int spin = 0; spin < 2; spin++){
 		for(int site = 0; site < k_num_atoms; site++){
 			double difference = abs(
 				spinAndSiteResolvedDensity[{spin, site}]
@@ -563,11 +556,11 @@ int main(int argc, char **argv) {
     Molecule whole_molecule;
     // Add molecules from xyz file
     whole_molecule.construct_molecule_from_file(in);
-    std::cout << whole_molecule << std::endl;
+    //std::cout << whole_molecule << std::endl;
 
     std::vector<int> atoms_in_unit_cell;
     double x_min = whole_molecule.get_x_min();
-    double x_max = whole_molecule.get_x_min() + periodicity_distance;
+    double x_max = x_min + periodicity_distance;
 
     for(size_t i = 0; i < whole_molecule.size(); ++i){
         double mol_x_coord = whole_molecule.get_x_coords(i);
@@ -576,21 +569,23 @@ int main(int argc, char **argv) {
         }
     }
 
-    std::cout << "Selected atom in unit cell: " << '\n';
+    std::cout << "Selected atom in original unit cell: " << '\n';
     for(size_t j = 0; j < atoms_in_unit_cell.size(); ++j){
         std::cout << atoms_in_unit_cell[j] << " ";
     }
     std::cout << '\n';
 
+    double y_min = whole_molecule.get_y_min();
+    double y_max = whole_molecule.get_y_max();
 
-    std::cout << "The box spans in x-dir from " << whole_molecule.get_x_min()
-              << " to " << (whole_molecule.get_x_min() + periodicity_distance) << '\n';
+    std::cout << "The unit cell spans from (" << x_min << ", " << y_min
+              << ") to (" << x_max << ", " << y_max << ")." << '\n';
 
     Molecule molecule;
     molecule.construct_molecule_from_indexlist(whole_molecule,
             atoms_in_unit_cell, periodicity_distance);
 
-    std::cout << "New (tiny) molecule: " << '\n';
+    std::cout << "Minimal molecule: " << '\n';
     std::cout << molecule << std::endl;
 
     Bonds bonds;
@@ -605,7 +600,6 @@ int main(int argc, char **argv) {
     std::cout << '\n';
     std::cout << std::boolalpha;
 
-    double unit_cell_size_y = molecule.find_unit_cell_size();
 
     // Setup lattice vector. By using three three-dimensional vectors
 	// instead of two two-dimensional vectors, the cross product expression
@@ -613,25 +607,8 @@ int main(int argc, char **argv) {
 	// products.
     Vector3d r[3];
     r[0] = Vector3d({periodicity_distance, 0, 0});
-    r[1] = Vector3d({-periodicity_distance/2, periodicity_distance*sqrt(3)/2, 0});
-    r[2] = Vector3d({0, 0, periodicity_distance});
-
-    std::cout << "Not crashed yet -2" << '\n';
-    std::cout << "periodicity_distance: " << periodicity_distance << '\n';
-    // Calculate the reciprocal lattice vectors.
-
-    /**
-    Vector3d r_AB[3];
-    r_AB[0] = (r[0] + 2*r[1])/3.;
-	r_AB[1] = -r[1] + r_AB[0];
-	r_AB[2] = -r[0] - r[1] + r_AB[0];
-
-    PRINTVAR(r_AB[0]); PRINTVAR(r_AB[1]); PRINTVAR(r_AB[2]);
-    **/
-
-    // TODO: Compare r_AB to distance vectors computed below.
-
     r[1] = Vector3d({0,	periodicity_distance, 0});
+    r[2] = Vector3d({0, 0, periodicity_distance});
 
     PRINTVAR(r[0]); PRINTVAR(r[1]); PRINTVAR(r[2]);
     Vector3d k_orig[3];
@@ -643,14 +620,6 @@ int main(int argc, char **argv) {
 
     PRINTVAR(k_orig[0]); PRINTVAR(k_orig[1]); PRINTVAR(k_orig[2]);
 
-    std::cout << "Not crashed yet -1" << '\n';
-
-    std::cout << "y unit cell size: " << unit_cell_size_y << '\n';
-    std::cout << "What is k[0].x: " << k_orig[0].x << '\n';
-    std::cout << "What is k[0].y: " << k_orig[0].y << '\n';
-    std::cout << "What is k[0].z: " << k_orig[0].z << '\n';
-
-	//Setup the BrillouinZone.
     BrillouinZone brillouinZone(
 		{
 			{k_orig[0].x,k_orig[0].y,k_orig[0].z},
@@ -660,8 +629,6 @@ int main(int argc, char **argv) {
 		SpacePartition::MeshType::Nodal
 	);
 
-    std::cout << "Not crashed yet 0" << '\n';
-    //Create mesh.
 	vector<vector<double>> mesh = brillouinZone.getMinorMesh(
 		numMeshPoints
 	);
@@ -670,10 +637,6 @@ int main(int argc, char **argv) {
     spinAndSiteResolvedDensity = dummy_array;
 
     initSpinAndSiteResolvedDensity(spinAndSiteResolvedDensity);
-
-    std::cout << "Not crashed yet 1" << '\n';
-	//Setup model.
-	//model = create_hamiltonian(molecule, bonds, t, hubbard);
 
     std::cout << "mesh size: " << mesh.size() << '\n' << '\n' << '\n';
     std::cout << "Printing debug messages for m = 3:" << '\n';
@@ -686,187 +649,186 @@ int main(int argc, char **argv) {
         Vector3d kmesh({mesh[m][0], mesh[m][1], mesh[m][2]});
 
         const complex<double> one(1, 0);
-        // complex<double> h_unit_cell = -t;
-        // complex<double> h_border_crossing = -t * exp(-i*Vector3d::dotProduct(kmesh, k_orig[0]/3.0));
-        // complex<double> h_both = -t * (one + exp(-i*Vector3d::dotProduct(kmesh, k_orig[0])));
 
         h_state_enum h_state = undefined_enum;
 
         static int printer = 0;
         const int comp_val = 3;
-        for(auto bond : bonds_in_unit_cell){
-            bool first_is_odd = true;
-            complex<double> h;
+        for(int s = 0; s < 2; s++){
+            for(auto bond : bonds_in_unit_cell){
+                bool first_is_odd = true;
+                complex<double> h;
 
-            // double x_diff {
-            //     molecule.get_x_coords(bond.second)
-            //     - molecule.get_x_coords(bond.first)
-            // };
-            // double y_diff {
-            //     molecule.get_y_coords(bond.second)
-            //     - molecule.get_y_coords(bond.first)
-            // };
-            //
-            // if(printer == comp_val){
-            //     std::cout << "Distance Vector between atoms " << bond.first
-            //               << ", " << bond.second << " in original bond: ("
-            //               << x_diff << ", " << y_diff << ", 0)" << '\n';
-            // }
-            // Vector3d dist_vec({x_diff, y_diff, 0});
+                h = -t * one;
 
-            //h = -t * exp(-i*Vector3d::dotProduct(kmesh, r[0]));
-            h = -t * one;
-            // if(printer == comp_val)
-            //     std::cout << "h for original bond: " << h << '\n';
+                if((bond.first + bond.second) % 2 == 0){
+                    if(bond_is_in_unit_cell(bonds_in_unit_cell,
+                            bond.first+1, bond.second)
+                            || bond_is_in_unit_cell(bonds_in_unit_cell,
+                            bond.first, bond.second+1)){
 
-            if((bond.first + bond.second) % 2 == 0){
-                if(bond_is_in_unit_cell(bonds_in_unit_cell,
-                        bond.first+1, bond.second)
-                        || bond_is_in_unit_cell(bonds_in_unit_cell,
-                        bond.first, bond.second+1)){
+                        if(printer == comp_val){
+                            std::cout << "Skipping hopping for bond (" << bond.first
+                                  << ", " << bond.second << ")." << '\n';
+                        }
+                        continue;
+                    }
+                    h_state = h_unit_cell_enum;
+                }
+                else{
+                    if(bond.second % 2 == 1){
+                        first_is_odd = false;
+                    }
+                    if(bond_is_in_unit_cell(bonds_in_unit_cell,
+                            bond.first-first_is_odd, bond.second-(1-first_is_odd))){
+                        double second_x_diff { 0.0 };
+                        double second_y_diff { 0.0 };
 
+                        h = -t * (one + exp(-i*Vector3d::dotProduct(kmesh, r[0])));
+                        h_state = h_both_enum;
+
+                    }
+                    else{
+                        if(first_is_odd){
+                            h = -t * exp(-i*Vector3d::dotProduct(kmesh, r[0]));
+                        }
+                        h_state = h_border_crossing_enum;
+                    }
+                }
+                int first_atom { bond.first };
+                int second_atom { bond.second };
+                if(h_state == h_border_crossing_enum){
+                    h = -t * exp(-i*Vector3d::dotProduct(kmesh, r[0]));
+                    model << HoppingAmplitude(
+            			h,
+            			{kIndex[0], kIndex[1], kIndex[2], s, (first_atom - first_is_odd)},
+                        {kIndex[0], kIndex[1], kIndex[2], s, (second_atom - (1-first_is_odd))}
+            		) + HC;
                     if(printer == comp_val){
-                        std::cout << "Skipping hopping for bond (" << bond.first
-                              << ", " << bond.second << ")." << '\n';
+                        std::cout << "Added hoppings from " << (second_atom - (1-first_is_odd))
+                                << " to " << (first_atom - first_is_odd)
+                                << " as " << h_state << " with h value " << h << '\n';
+
                     }
                     continue;
                 }
-                h_state = h_unit_cell_enum;
-            }
-            else{
-                if(bond.second % 2 == 1){
-                    first_is_odd = false;
+                if(first_atom % 2 == 1){
+                    first_atom -= 1;
+
+                    model << HoppingAmplitude(
+            			h,
+            			{kIndex[0], kIndex[1], kIndex[2], s, second_atom},
+            			{kIndex[0], kIndex[1], kIndex[2], s, first_atom}
+            		) + HC;
+
+                    if(printer == comp_val){
+                        std::cout << "Added hoppings from " << second_atom
+                                << " to " << first_atom
+                                << " as " << h_state << " with h value " << h << '\n';
+                    }
                 }
-                if(bond_is_in_unit_cell(bonds_in_unit_cell,
-                        bond.first-first_is_odd, bond.second-(1-first_is_odd))){
-                    double second_x_diff { 0.0 };
-                    double second_y_diff { 0.0 };
-                    // if(first_is_odd){
-                    //     second_x_diff =
-                    //         molecule.get_x_coords(bond.first-first_is_odd)
-                    //         - molecule.get_x_coords(bond.second-(1-first_is_odd));
-                    //     second_y_diff =
-                    //         molecule.get_y_coords(bond.first-first_is_odd)
-                    //         - molecule.get_y_coords(bond.second-(1-first_is_odd));
-                    // }
-                    // else{
-                    //     second_x_diff =
-                    //         molecule.get_x_coords(bond.second-(1-first_is_odd))
-                    //         - molecule.get_x_coords(bond.first-first_is_odd);
-                    //
-                    //     second_y_diff =
-                    //         molecule.get_y_coords(bond.second-(1-first_is_odd))
-                    //         - molecule.get_y_coords(bond.first-first_is_odd);
-                    // }
-                    //
-                    // Vector3d second_dist_vec({second_x_diff, second_y_diff, 0});
-                    h = -t * (one + exp(-i*Vector3d::dotProduct(kmesh, r[0])));
-                    // h = -t * (exp(-i*Vector3d::dotProduct(kmesh, dist_vec)) + exp(-i*Vector3d::dotProduct(kmesh, second_dist_vec)));
-                    h_state = h_both_enum;
-                    // if(printer > comp_val && printer < comp_val + 3){
-                    //     std::cout << "h both is: " << h << '\n';
-                    //     std::cout << "dist vec: " << dist_vec << '\n';
-                    //     std::cout << "dist vec2: " << second_dist_vec << '\n';
-                    // }
+                else if(second_atom % 2 == 1){
+                    second_atom -= 1;
+                    model << HoppingAmplitude(
+            			h,
+            			{kIndex[0], kIndex[1], kIndex[2], s, first_atom},
+            			{kIndex[0], kIndex[1], kIndex[2], s, second_atom}
+            		) + HC;
+                    if(printer == comp_val){
+                        std::cout << "Added hoppings from " << first_atom
+                                << " to " << second_atom
+                                << " as " << h_state << " with h value " << h << '\n';
+                    }
                 }
                 else{
-                    if(first_is_odd){
-                        // if(printer == comp_val){
-                        //     std::cout << "Spec Border hopping distance vector between atoms ("
-                        //     << (bond.first - 1) << ", " << bond.second << "): "
-                        //     << dist_vec << '\n';
-                        // }
-                        h = -t * exp(-i*Vector3d::dotProduct(kmesh, r[0]));
-                        // if(printer == comp_val){
-                        //     std::cout << "h for spec border hopping:" << h << '\n';
-                        //     std::cout << "Comparing dist vec with minus dist vec:"
-                        //               << -t * exp(-i*Vector3d::dotProduct(kmesh, dist_vec))
-                        //               << " against "
-                        //               << -t * exp(-i*Vector3d::dotProduct(kmesh, -dist_vec))
-                        //               << '\n';
-                        // }
+                    model << HoppingAmplitude(
+            			h,
+            			{kIndex[0], kIndex[1], kIndex[2], s, first_atom},
+            			{kIndex[0], kIndex[1], kIndex[2], s, second_atom}
+            		) + HC;
+                    if(printer == comp_val){
+                        std::cout << "Added hoppings from " << first_atom
+                                << " to " << second_atom
+                                << " as " << h_state << " with h value " << h << '\n';
                     }
-                    h_state = h_border_crossing_enum;
                 }
-            }
-            int first_atom { bond.first };
-            int second_atom { bond.second };
-            if(h_state == h_border_crossing_enum){
-                // double x_diff_test = molecule.get_x_coords(first_atom - first_is_odd) - molecule.get_x_coords(second_atom - (1-first_is_odd));
-                // double y_diff_test = molecule.get_y_coords(first_atom - first_is_odd) - molecule.get_y_coords(second_atom - (1-first_is_odd));
-                // Vector3d dist_vec_test({x_diff_test, y_diff_test, 0});
-                h = -t * exp(-i*Vector3d::dotProduct(kmesh, r[0]));
-                model << HoppingAmplitude(
-        			h,
-        			{kIndex[0], kIndex[1], kIndex[2], (first_atom - first_is_odd)},
-                    {kIndex[0], kIndex[1], kIndex[2], (second_atom - (1-first_is_odd))}
-        		) + HC;
-                if(printer == comp_val){
-                    std::cout << "Added hoppings from " << (second_atom - (1-first_is_odd))
-                            << " to " << (first_atom - first_is_odd)
-                            << " as " << h_state << " with h value " << h << '\n';
-                    if(h_state = h_border_crossing_enum)
-                        std::cout << "CALLED BORDER CROSSING FROM 0" << '\n';
-                }
-                continue;
-            }
-            if(first_atom % 2 == 1){
-                first_atom -= 1;
 
-                model << HoppingAmplitude(
-        			h,
-        			{kIndex[0], kIndex[1], kIndex[2], second_atom},
-        			{kIndex[0], kIndex[1], kIndex[2], first_atom}
-        		) + HC;
+                h_state = undefined_enum;
+            }
+        }
 
-                if(printer == comp_val){
-                    std::cout << "Added hoppings from " << second_atom
-                            << " to " << first_atom
-                            << " as " << h_state << " with h value " << h << '\n';
-                    if(h_state = h_border_crossing_enum)
-                        std::cout << "CALLED BORDER CROSSING FROM 1" << '\n';
+        if(hubbard){
+            std::cout << "atoms in unit cell for hubbard: " << atoms_in_unit_cell.size() << '\n';
+            for(int atom = 0; atom < atoms_in_unit_cell.size()*2; atom+=2){
+                for (int s = 0; s < 2; s++){
+                    model << HoppingAmplitude(
+                        H_U,
+                        {kIndex[0], kIndex[1], kIndex[2], s, atom},
+                        {kIndex[0], kIndex[1], kIndex[2], s, atom}
+                    );
                 }
+                std::cout << "Count me" << '\n';
             }
-            else if(second_atom % 2 == 1){
-                second_atom -= 1;
-                model << HoppingAmplitude(
-        			h,
-        			{kIndex[0], kIndex[1], kIndex[2], first_atom},
-        			{kIndex[0], kIndex[1], kIndex[2], second_atom}
-        		) + HC;
-                if(printer == comp_val){
-                    std::cout << "Added hoppings from " << first_atom
-                            << " to " << second_atom
-                            << " as " << h_state << " with h value " << h << '\n';
-                    if(h_state = h_border_crossing_enum)
-                        std::cout << "CALLED BORDER CROSSING FROM 2" << '\n';
-                }
-            }
-            else{
-                model << HoppingAmplitude(
-        			h,
-        			{kIndex[0], kIndex[1], kIndex[2], first_atom},
-        			{kIndex[0], kIndex[1], kIndex[2], second_atom}
-        		) + HC;
-                if(printer == comp_val){
-                    std::cout << "Added hoppings from " << first_atom
-                            << " to " << second_atom
-                            << " as " << h_state << " with h value " << h << '\n';
-                    if(h_state = h_border_crossing_enum)
-                        std::cout << "CALLED BORDER CROSSING FROM 3" << '\n';
-                }
-            }
-
-            h_state = undefined_enum;
         }
         printer++;
     }
     std::cout << '\n';
-    std::cout << "Not crashed yet 2" << '\n';
 
     model.construct();
 
-    //Setup the solver.
+    //Get the HoppingAmplitudeSet from the Model
+    //and extract the basis size.
+    const HoppingAmplitudeSet &hoppingAmplitudeSet
+        = model.getHoppingAmplitudeSet();
+    unsigned int basisSize
+        = hoppingAmplitudeSet.getBasisSize();
+    //Initialize the Hamiltonian on a format most
+    //suitable for the algorithm at hand.
+    Array<complex<double>> hamiltonian(
+        {basisSize, basisSize},
+        0.
+    );
+    //Iterate over the HoppingAmplitudes.
+    for(
+        HoppingAmplitudeSet::ConstIterator iterator
+            = hoppingAmplitudeSet.cbegin();
+        iterator != hoppingAmplitudeSet.cend();
+        ++iterator
+    ){
+        //Extract the amplitude and physical
+        //indices from the HoppingAmplitude.
+        complex<double> amplitude
+            = (*iterator).getAmplitude();
+        const Index &toIndex
+            = (*iterator).getToIndex();
+        const Index &fromIndex
+            = (*iterator).getFromIndex();
+
+        //Convert the physical indices to linear
+        //indices.
+        unsigned int row
+            = hoppingAmplitudeSet.getBasisIndex(
+                toIndex
+            );
+        unsigned int column
+            = hoppingAmplitudeSet.getBasisIndex(
+                fromIndex
+            );
+
+        //Write the amplitude to the Hamiltonian
+        //that will be used in this algorithm.
+        hamiltonian[{row, column}] += amplitude;
+    }
+    //Print the Hamiltonian.
+    for(unsigned int row = 0; row < basisSize; row++){
+        for(unsigned int column = 0; column < basisSize; column++){
+            Streams::out << real(hamiltonian[{row, column}])
+                << "\t";
+        }
+        Streams::out << "\n";
+    }
+
+
 	Solver::BlockDiagonalizer solver;
 	solver.setModel(model);
 
@@ -889,11 +851,7 @@ int main(int argc, char **argv) {
 		ENERGY_RESOLUTION
 	);
 
-	//Calculate the density of states.
 	Property::DOS dos = propertyExtractor.calculateDOS();
-
-
-    std::cout << "Not crashed yet 3" << '\n';
 
     std::cout << "MPI: " << M_PI << '\n';
     Vector3d lowest({-M_PI / periodicity_distance, 0, 0});
@@ -912,12 +870,7 @@ int main(int argc, char **argv) {
         {lowest, highest}
     };
 
-    std::cout << "Not crashed yet 3.2" << '\n';
-
-	//Array<double> bandStructure({K_POINTS_PER_PATH}, 0);
 	Range interpolator(0, 1, K_POINTS_PER_PATH);
-
-    std::cout << "Not crashed yet 3.3" << '\n';
 
     ofstream myfile;
 	myfile.open("results.txt");
@@ -949,40 +902,22 @@ int main(int argc, char **argv) {
                 numMeshPoints
 			);
 
-            //std::cout << "Not crashed yet 5" << '\n';
-			//bandStructure[{0, n}] =
-            for(size_t i = 0; i < atoms_in_unit_cell.size(); ++i){
-                myfile << propertyExtractor.getEigenValue(kIndex, atoms_in_unit_cell[i]);
-                if(i != atoms_in_unit_cell.size()-1)
-                    myfile << ", ";
-                else{
-                    myfile << std::endl;
+            for(unsigned int spin = 0; spin < 2; ++spin){
+                for(size_t i = 0; i < atoms_in_unit_cell.size(); ++i){
+                    myfile << propertyExtractor.getEigenValue(kIndex, atoms_in_unit_cell[i]);
+                    if(i != atoms_in_unit_cell.size()-1)
+                        myfile << ", ";
+                    else{
+                        myfile << std::endl;
+                    }
                 }
             }
-			// //bandStructure[{1, n}] = propertyExtractor.getEigenValue(kIndex, 1);
 		}
 	}
-
-    std::cout << "Not crashed yet 6" << '\n';
-
-    int basisSize = model.getBasisSize();
-
 
 	std::cout << "Writing done." << '\n';
 	myfile.close();
 
-
-    /**
-	//Find max and min value for the band structure.
-	double min = bandStructure[{0, 0}];
-	double max = bandStructure[{1, 0}];
-	for(unsigned int n = 0; n < K_POINTS_PER_PATH; n++){
-		if(min > bandStructure[{0, n}])
-			min = bandStructure[{0, n}];
-		if(max < bandStructure[{1, n}])
-			max = bandStructure[{1, n}];
-	}
-    **/
     return 0;
 }
 
