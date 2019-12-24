@@ -4,8 +4,8 @@ import math
 #x = np.array()
 atoms = []
 
-band_thickness = 8
-band_length = 8
+band_thickness = 4
+band_length = 3
 repetitions = int(band_thickness/4)
 
 y_dist = 2.46

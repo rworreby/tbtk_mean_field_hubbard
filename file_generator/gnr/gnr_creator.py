@@ -3,7 +3,7 @@ import numpy as np
 #x = np.array()
 atoms = []
 
-band_thickness = 7 #thickness of gnr
+band_thickness = 3 #thickness of gnr
 band_length = 2
 
 minor_atoms = int((band_thickness-1)/2)

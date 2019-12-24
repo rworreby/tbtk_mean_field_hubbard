@@ -122,7 +122,7 @@ int Atom::counter_ = 0;
 
 class Molecule{
 public:
-    void construct_molecule_from_file(std::istream& in){
+    Molecule(std::istream& in){
         std::string n_atom;
         getline(in, n_atom);
         std::cout << "Number of atoms in file: " << n_atom << '\n';
@@ -140,8 +140,9 @@ public:
         set_min_max();
     }
 
-    void construct_molecule_from_indexlist(Molecule other_mol,
+    Molecule (Molecule other_mol,
             std::vector<int> indices, double periodicity_distance){
+        std::cout << "Mol fed to func:" << other_mol << '\n';
         for(auto index : indices){
             atoms_.push_back(other_mol.atoms_[index]);
             val_x.push_back(other_mol.atoms_[index].name_coords_.xyz.x);
@@ -149,9 +150,13 @@ public:
 
             atoms_.push_back(other_mol.atoms_[index]);
             atoms_[atoms_.size()-1].name_coords_.xyz.x += periodicity_distance;
-            val_x.push_back(other_mol.atoms_[index].name_coords_.xyz.x);
+            val_x.push_back(other_mol.atoms_[atoms_.size()-1].name_coords_.xyz.x);
             val_y.push_back(other_mol.atoms_[index].name_coords_.xyz.y);
+            std::cout << "Printing atom " << index << " " << atoms_.at(index) << '\n';
+            std::cout << "Printing atom " << atoms_.at(atoms_.size()-1) << '\n';
         }
+        for(auto i: indices)
+            std::cout << "index:" << i << '\n';
         set_min_max();
     }
 
@@ -495,6 +500,29 @@ bool selfConsistencyCallbackPeriodic(Solver::BlockDiagonalizer &solver){
 		return true;
 }
 
+std::vector<int> get_atoms_in_unit_cell(Molecule molecule,
+        double x_min, double x_max){
+
+    std::vector<int> atoms_in_unit_cell;
+    for(size_t i = 0; i < molecule.size(); ++i){
+        double mol_x_coord = molecule.get_x_coords(i);
+        std::cout << "Testing for value " << mol_x_coord << '\n';
+        if(mol_x_coord + k_eps < x_max && mol_x_coord >= x_min - k_eps){
+            atoms_in_unit_cell.push_back(i);
+            std::cout << "Successful, lies within " << x_min << " and " << x_max << '\n';
+        }
+    }
+    return atoms_in_unit_cell;
+}
+
+
+void print_atom_indices(std::vector<int> v){
+    for(size_t j = 0; j < v.size(); ++j){
+        std::cout << v[j] << " ";
+    }
+    std::cout << '\n';
+}
+
 
 int main(int argc, char **argv) {
     string periodicity_direction { "" };
@@ -553,27 +581,19 @@ int main(int argc, char **argv) {
 	const double ENERGY_LOWER_BOUND = -20;
 	const double ENERGY_UPPER_BOUND = 20;
 
-    Molecule whole_molecule;
+    Molecule whole_molecule(in);
     // Add molecules from xyz file
-    whole_molecule.construct_molecule_from_file(in);
+    //whole_molecule.construct_molecule_from_file(in);
     //std::cout << whole_molecule << std::endl;
 
-    std::vector<int> atoms_in_unit_cell;
     double x_min = whole_molecule.get_x_min();
     double x_max = x_min + periodicity_distance;
 
-    for(size_t i = 0; i < whole_molecule.size(); ++i){
-        double mol_x_coord = whole_molecule.get_x_coords(i);
-        if(mol_x_coord + k_eps < x_max && mol_x_coord >= x_min - k_eps){
-            atoms_in_unit_cell.push_back(i);
-        }
-    }
+    std::vector<int> atoms_in_unit_cell = get_atoms_in_unit_cell(
+            whole_molecule, x_min, x_max);
 
     std::cout << "Selected atom in original unit cell: " << '\n';
-    for(size_t j = 0; j < atoms_in_unit_cell.size(); ++j){
-        std::cout << atoms_in_unit_cell[j] << " ";
-    }
-    std::cout << '\n';
+    print_atom_indices(atoms_in_unit_cell);
 
     double y_min = whole_molecule.get_y_min();
     double y_max = whole_molecule.get_y_max();
@@ -581,9 +601,13 @@ int main(int argc, char **argv) {
     std::cout << "The unit cell spans from (" << x_min << ", " << y_min
               << ") to (" << x_max << ", " << y_max << ")." << '\n';
 
-    Molecule molecule;
-    molecule.construct_molecule_from_indexlist(whole_molecule,
+    Molecule molecule(whole_molecule,
             atoms_in_unit_cell, periodicity_distance);
+
+    std::vector<int> new_atoms_in_unit_cell;
+    new_atoms_in_unit_cell = get_atoms_in_unit_cell(molecule, x_min, x_max);
+    std::cout << "Selected atom in constructed molecule: " << '\n';
+    print_atom_indices(new_atoms_in_unit_cell);
 
     std::cout << "Minimal molecule: " << '\n';
     std::cout << molecule << std::endl;
@@ -657,9 +681,7 @@ int main(int argc, char **argv) {
         for(int s = 0; s < 2; s++){
             for(auto bond : bonds_in_unit_cell){
                 bool first_is_odd = true;
-                complex<double> h;
-
-                h = -t * one;
+                complex<double> h { -t * one };
 
                 if((bond.first + bond.second) % 2 == 0){
                     if(bond_is_in_unit_cell(bonds_in_unit_cell,
@@ -727,24 +749,12 @@ int main(int argc, char **argv) {
                                 << " as " << h_state << " with h value " << h << '\n';
                     }
                 }
-                else if(second_atom % 2 == 1){
-                    second_atom -= 1;
-                    model << HoppingAmplitude(
-            			h,
-            			{kIndex[0], kIndex[1], kIndex[2], s, first_atom},
-            			{kIndex[0], kIndex[1], kIndex[2], s, second_atom}
-            		) + HC;
-                    if(printer == comp_val){
-                        std::cout << "Added hoppings from " << first_atom
-                                << " to " << second_atom
-                                << " as " << h_state << " with h value " << h << '\n';
-                    }
-                }
                 else{
+                    bool second_atom_odd { second_atom % 2 == 1 };
                     model << HoppingAmplitude(
             			h,
             			{kIndex[0], kIndex[1], kIndex[2], s, first_atom},
-            			{kIndex[0], kIndex[1], kIndex[2], s, second_atom}
+            			{kIndex[0], kIndex[1], kIndex[2], s, second_atom - second_atom_odd}
             		) + HC;
                     if(printer == comp_val){
                         std::cout << "Added hoppings from " << first_atom
@@ -758,8 +768,7 @@ int main(int argc, char **argv) {
         }
 
         if(hubbard){
-            std::cout << "atoms in unit cell for hubbard: " << atoms_in_unit_cell.size() << '\n';
-            for(int atom = 0; atom < atoms_in_unit_cell.size()*2; atom+=2){
+            for(int atom = 0; atom < new_atoms_in_unit_cell.size(); ++atom){
                 for (int s = 0; s < 2; s++){
                     model << HoppingAmplitude(
                         H_U,
@@ -767,7 +776,6 @@ int main(int argc, char **argv) {
                         {kIndex[0], kIndex[1], kIndex[2], s, atom}
                     );
                 }
-                std::cout << "Count me" << '\n';
             }
         }
         printer++;
@@ -775,6 +783,7 @@ int main(int argc, char **argv) {
     std::cout << '\n';
 
     model.construct();
+
 
     //Get the HoppingAmplitudeSet from the Model
     //and extract the basis size.
@@ -820,8 +829,8 @@ int main(int argc, char **argv) {
         hamiltonian[{row, column}] += amplitude;
     }
     //Print the Hamiltonian.
-    for(unsigned int row = 0; row < basisSize; row++){
-        for(unsigned int column = 0; column < basisSize; column++){
+    for(unsigned int row = 0; row < atoms_in_unit_cell.size(); row++){
+        for(unsigned int column = 0; column < atoms_in_unit_cell.size(); column++){
             Streams::out << real(hamiltonian[{row, column}])
                 << "\t";
         }
