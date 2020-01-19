@@ -687,7 +687,7 @@ int main(int argc, char *argv[]){
 
     std::cout << "Variable values: " << '\n';
     PRINTVAR(periodicity_direction); PRINTVAR(periodicity_distance);
-    PRINTVAR(t); PRINTVAR(threshold); PRINTVAR(hubbard); PRINTVAR(periodic);
+    PRINTVAR(t); PRINTVAR(threshold); PRINTVAR(U); PRINTVAR(periodic);
 
     //Usage example
     Molecule example_mol;
