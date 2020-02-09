@@ -1,0 +1,99 @@
+TESTVAR = 1d_atom_chain.xyz -t 2.7 -b 1.7 -p X 1.42
+.PHONY: testrun
+testrun: all
+	./build/Application $(TESTVAR)
+
+TESTVARH = 1d_atom_chain.xyz -t 2.7 -b 1.7 -H 2.0 -p X 1.42
+.PHONY: testrunh
+testrunh: all
+	./build/Application $(TESTVARH)
+
+TESTVAR2 = 1d_atom_chain.xyz -t 2.7 -b 1.7 -p X 2.84
+.PHONY: testrun2
+testrun2: all
+	./build/Application $(TESTVAR2)
+
+TESTVAR2H = 1d_atom_chain.xyz -t 2.7 -b 1.7 -H 5.0 -p X 2.84
+.PHONY: testrun2h
+testrun2h: all
+	./build/Application $(TESTVAR2H)
+
+VARSZZ3 = input/3_AGNR_len_3.xyz -t 2.7 -b 1.7 -p X 4.26
+.PHONY: 3agnr
+3agnr: all
+	./build/Application $(VARSZZ3)
+
+VARSZZ3H = input/gnr_4_periodic.xyz -t 2.7 -b 1.7 -H 2.0 -p X 2.84
+.PHONY:zigzag4h
+zigzag4h: all
+	./build/Application $(VARSZZ3H)
+
+VARSSS = input/gnr_4_periodic.xyz -t 2.7 -b 1.7 -p X 4.26
+
+.PHONY: armchair4
+armchair4: all
+	./build/Application $(VARSSS)
+
+VARS2 = input/gnr_8_periodic.xyz -t 2.7 -b 1.7 -p X 2.84
+
+.PHONY: zigzag8
+zigzag8: all
+	./build/Application $(VARS2)
+
+VARSZZ8 = input/gnr_8_periodic.xyz -t 2.7 -H 2.0 -b 1.7 -p X 2.84
+.PHONY: zigzag8h
+zigzag8h: all
+	./build/Application $(VARSZZ8)
+
+VARS3 = input/gnr_20_periodic.xyz -t 2.7 -b 1.7 -p X 2.84
+.PHONY: zigzag20
+zigzag20: all
+	./build/Application $(VARS3)
+
+VARS4 = input/gnr_5_periodic.xyz -t 2.7 -b 1.7 -p X 4.26
+.PHONY: armchair5
+armchair5: all
+	./build/Application $(VARS4)
+
+VARSSYM = input/gnr_sym_agnr8.xyz -t 2.7 -b 1.7 -p X 4.26
+
+.PHONY: armchair8
+armchair8: all
+	./build/Application $(VARSSYM)
+
+
+VARSSYM2 = input/gnr_sym_agnr6.xyz -t 2.7 -b 1.7 -p X 4.26
+
+.PHONY: armchair6
+armchair6: all
+	./build/Application $(VARSSYM2)
+
+VARS5 = input/gnr_7_periodic.xyz -t 2.7 -b 1.7 -p X 4.26
+
+.PHONY: armchair7
+armchair7: all
+	./build/Application $(VARS5)
+
+VARSARM7 = input/gnr_7_periodic.xyz -t 2.7 -H 4.59 -b 1.7 -p X 4.26
+
+.PHONY: armchair7h
+armchair7h: all
+	./build/Application $(VARSARM7)
+
+VARS6 = input/gnr_9_periodic.xyz -t 1 -b 1.7 -p X 4.26
+
+.PHONY: armchair9
+armchair9: all
+	./build/Application $(VARS6)
+
+VARSGNR17 = input/gnr_17_periodic.xyz -t 2.7 -b 1.7 -p X 4.26
+
+.PHONY: armchair17
+armchair17: all
+	./build/Application $(VARSGNR17)
+
+VARSGNR17H = input/gnr_17_periodic.xyz -t 5.7 -b 1.7 -p X 4.26
+
+.PHONY: armchair17h
+armchair17h: all
+	./build/Application $(VARSGNR17H)

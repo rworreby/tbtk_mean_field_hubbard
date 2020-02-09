@@ -1,0 +1,108 @@
+VARS = input/triangulane.xyz -t 1.0 -b 1.7
+
+.PHONY:molecule
+molecule: all
+	./build/Application $(VARS)
+
+#=============================================================================
+VAR7AGNR1 = input/7_agnr/7_AGNR_len_1.xyz -t 2.7 -b 1.7 -H 5.13 #4.59
+
+.PHONY: 7agnr1
+7agnr1: all
+	./build/Application $(VAR7AGNR1)
+
+VAR7AGNR2 = input/7_agnr/7_AGNR_len_2.xyz -t 2.7 -b 1.7 -H 5.13 #4.59
+
+.PHONY: 7agnr2
+7agnr2: all
+	./build/Application $(VAR7AGNR2)
+
+VAR7AGNR4 = input/7_agnr/7_AGNR_len_4.xyz -t 2.7 -b 1.7 -H 5.13 #4.59
+
+.PHONY: 7agnr4
+7agnr4: all
+	./build/Application $(VAR7AGNR4)
+
+VAR7AGNR8 = input/7_agnr/7_AGNR_len_8.xyz -t 2.7 -b 1.7 -H 5.13
+
+.PHONY: 7agnr8
+7agnr8: all
+	./build/Application $(VAR7AGNR8)
+
+VAR7AGNR16 = input/7_agnr/7_AGNR_len_16.xyz -t 2.7 -b 1.7 -H 5.13
+
+.PHONY: 7agnr16
+7agnr16: all
+	./build/Application $(VAR7AGNR16)
+
+VAR7AGNR32 = input/7_agnr/7_AGNR_len_32.xyz -t 2.7 -b 1.7 -H 5.13
+
+.PHONY: 7agnr32
+7agnr32: all
+	./build/Application $(VAR7AGNR32)
+
+VAR7AGNR64 = input/7_agnr/7_AGNR_len_64.xyz -t 2.7 -b 1.7 -H 4.59
+
+.PHONY: 7agnr64
+7agnr64: all
+	./build/Application $(VAR7AGNR64)
+
+VAR7AGNR128 = input/7_agnr/7_AGNR_len_128.xyz -t 2.7 -b 1.7 -H 4.59
+
+.PHONY: 7agnr128
+7agnr128: all
+	./build/Application $(VAR7AGNR128)
+
+
+VAR7AGNR256 = input/7_agnr/7_AGNR_len_256.xyz -t 2.7 -b 1.7 -H 4.59
+
+.PHONY: 7agnr256
+7agnr256: all
+	./build/Application $(VAR7AGNR256)
+
+
+VAR7AGNR512 = input/7_agnr/7_AGNR_len_512.xyz -t 2.7 -b 1.7 -H 4.59
+
+.PHONY: 7agnr512
+7agnr512: all
+	./build/Application $(VAR7AGNR512)
+
+
+VAR7AGNR1024 = input/7_agnr/7_AGNR_len_1024.xyz -t 2.7 -b 1.7 -H 4.59
+
+.PHONY: 7agnr1024
+7agnr1024: all
+	./build/Application $(VAR7AGNR1024)
+
+
+VAR7AGNR2048 = input/7_agnr/7_AGNR_len_2048.xyz -t 2.7 -b 1.7 -H 4.59
+
+.PHONY: 7agnr2048
+7agnr2048: all
+	./build/Application $(VAR7AGNR2048)
+#=============================================================================
+
+VARS2 = input/triangulane.xyz -t 1.0 -b 1.7 -H 1.8
+
+.PHONY: moleculeh
+moleculeh: all
+	./build/Application $(VARS2)
+
+VARS3 = input/gnf/gnf_3x3.xyz -t 2.7 -b 1.7 -H 4.59
+
+.PHONY: gnfh
+gnfh7: all
+	./build/Application $(VARS3)
+
+VARS4 = input/gnf/gnf_4x4.xyz -t 2.7 -b 1.7 -H 4.59
+
+.PHONY: gnfh11
+gnfh11: all
+	./build/Application $(VARS4)
+
+VARS5 = input/gnf/gnf_5x5.xyz -t 2.7 -b 1.7 -H 4.59
+
+.PHONY: gnfh12
+gnfh12: all
+	./build/Application $(VARS5)
+#=============================================================================
