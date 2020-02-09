@@ -140,7 +140,7 @@ public:
         set_min_max();
     }
 
-    Molecule (Molecule other_mol,
+    Molecule(Molecule other_mol,
             std::vector<int> indices, double periodicity_distance){
         std::cout << "Mol fed to func:" << '\n'<< other_mol << '\n';
         for(auto index : indices){
@@ -233,7 +233,7 @@ public:
                   << "\n-------------------------------------------------------\n";
     }
 
-    void add_bonds(Molecule mol, double threshold, complex<double> t){
+    Bonds(Molecule mol, double threshold, complex<double> t){
         bond_threshold_ = threshold;
         t_ = t;
         std::cout << "Size of the considered molecule (no H): " << mol.size() << "\n";
@@ -252,13 +252,13 @@ public:
                 double z_diff = z_1 > z_2 ? z_1 - z_2 : z_2 - z_1;
                 double result = std::sqrt(x_diff * x_diff + y_diff * y_diff + z_diff * z_diff);
 
-                //if two atoms are inside the sum of their atomic radii
-                //(plus a threshold that is provided by the user, default 1.3)
-                //there is a bond between them
+                // if two atoms are inside the sum of their atomic radii
+                // plus a threshold that is provided by the user
+                // there is a bond between them
                 if(result < bond_threshold_){
-                    if(i % 2 == 1 && j % 2 == 1){
-                        continue;
-                    }
+                    // if(i % 2 == 1 && j % 2 == 1){
+                    //     continue;
+                    // }
                     bonds_.push_back(std::make_pair(i, j));
                 }
             }
@@ -583,7 +583,7 @@ int main(int argc, char **argv) {
 	UnitHandler::setScales({"1 C", "1 pcs", "1 eV", "1 Ao", "1 K", "1 s"});
 
     const size_t k_brillouin_zone_res = 1000;
-	const int k_points_per_path = k_brillouin_zone_res / 10;
+	const int k_points_per_path = k_brillouin_zone_res / 5;
 	vector<unsigned int> numMeshPoints = {
 		k_points_per_path,
         1,
@@ -619,9 +619,8 @@ int main(int argc, char **argv) {
     std::cout << "Minimal molecule: " << '\n';
     std::cout << molecule << std::endl;
 
-    Bonds bonds;
-    bonds.add_bonds(molecule, threshold, t);
-    //bonds.print_bonds();
+    Bonds bonds(molecule, threshold, t);
+    bonds.print_bonds();
 
     bonds_t bonds_in_unit_cell = bonds.bonds_;
     std::cout << "Bonds in molecule: " << '\n';
@@ -800,6 +799,8 @@ int main(int argc, char **argv) {
                 }
             }
         }
+
+
         printer++;
     }
     std::cout << '\n';
@@ -850,14 +851,26 @@ int main(int argc, char **argv) {
         //that will be used in this algorithm.
         hamiltonian[{row, column}] += amplitude;
     }
-    //Print the Hamiltonian.
-    for(unsigned int row = 18; row < 18 + atoms_in_unit_cell.size(); row++){
-        for(unsigned int column = 18; column < 18 + atoms_in_unit_cell.size(); column++){
+    // Print the Hamiltonian
+    std::cout << "Hamiltonian iteration 0:" << '\n';
+    for(unsigned int row = 0; row < atoms_in_unit_cell.size(); row++){
+        for(unsigned int column = 0; column < atoms_in_unit_cell.size(); column++){
             Streams::out << real(hamiltonian[{row, column}])
                 << "\t";
         }
         Streams::out << "\n";
     }
+    std::cout << '\n';
+    std::cout << "Hamiltonian iteration 3:" << '\n';
+    unsigned int twice_uc = atoms_in_unit_cell.size() * 2;
+    for(unsigned int row = twice_uc; row < twice_uc + atoms_in_unit_cell.size(); row++){
+        for(unsigned int column = twice_uc; column < twice_uc + atoms_in_unit_cell.size(); column++){
+            Streams::out << real(hamiltonian[{row, column}])
+                << "\t";
+        }
+        Streams::out << "\n";
+    }
+
 
 
 	Solver::BlockDiagonalizer solver;
