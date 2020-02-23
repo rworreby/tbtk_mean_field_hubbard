@@ -55,14 +55,15 @@ void print_help(bool full);
 complex<double> H_U(const Index &toIndex, const Index &fromIndex);
 
 std::complex<double> i(0, 1);
-double U { 0.0 };
-double spin_and_site_resolved_density_tol { 1e-5 };
-double k_density_tolerance { 1e-7 };
-double k_target_density_per_site { 1.0 };
-double k_mixing_parameter { 0.5 };
+double U{ 0.0 };
+double spin_and_site_resolved_density_tol{ 1e-5 };
+double k_density_tolerance{ 1e-7 };
+double k_target_density_per_site{ 1.0 };
+double k_mixing_parameter{ 0.5 };
+bool k_multiplicity{ false };
 Model model;
 Array<double> spin_and_site_resolved_density;
-size_t k_num_atoms { 0 };
+size_t k_num_atoms{ 0 };
 
 
 ofstream scf_convergence;
@@ -501,7 +502,7 @@ complex<double> H_U(const Index &toIndex, const Index &fromIndex){
 //continues as before, but now cutting the step in two each iteration. The
 //procedure stops once a density is found that differes from the
 //k_target_density_per_site by at most k_density_tolerance.
-void fixDensity(PropertyExtractor::Diagonalizer &propertyExtractor){
+void fixDensity(PropertyExtractor::Diagonalizer &propertyExtractor, bool multiplicity){
     double step_length = 1;
 
 	//Get the eigenvalues.
@@ -578,7 +579,7 @@ void fixDensity(PropertyExtractor::Diagonalizer &propertyExtractor){
 bool self_consistency_callback(Solver::Diagonalizer &solver){
 	PropertyExtractor::Diagonalizer propertyExtractor(solver);
 
-	fixDensity(propertyExtractor);
+	fixDensity(propertyExtractor, k_multiplicity);
 
 	Array<double> old_spin_and_site_resolved_density
 		= spin_and_site_resolved_density;
@@ -590,6 +591,20 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 	Property::Density density = propertyExtractor.calculateDensity({
 		{IDX_ALL, IDX_ALL}
 	});
+
+
+    static int print_count = 0;
+    if(print_count++ < 3){
+        for (size_t spin_ = 0; spin_ < 2; spin_++) {
+            double total_spin_density = 0;
+            for (size_t site = 0; site < k_num_atoms; site++) {
+                total_spin_density += spin_and_site_resolved_density[{spin_, site}];
+
+            }
+            std::cout << std::boolalpha;
+            std::cout << "Total spin density for spin " << spin_ << total_spin_density << '\n';
+        }
+    }
 
 	//Update the spin and site resolved density. Mix with the previous
 	//value to stabilize the self-consistent calculation.
@@ -678,6 +693,7 @@ int main(int argc, char *argv[]){
             }
             if(!strcmp(argv[i], "-M") || !strcmp(argv[i], "--multiplicity")){
                 multiplicity = std::stod(argv[++i]);
+                k_multiplicity = multiplicity; //casting
                 if(temperature != 0.01){
                     std::cout << "Setting temperature to 0." << '\n';
                 }
