@@ -502,7 +502,7 @@ complex<double> H_U(const Index &toIndex, const Index &fromIndex){
 //continues as before, but now cutting the step in two each iteration. The
 //procedure stops once a density is found that differes from the
 //k_target_density_per_site by at most k_density_tolerance.
-void fixDensity(PropertyExtractor::Diagonalizer &propertyExtractor, bool multiplicity){
+void fixDensity(PropertyExtractor::Diagonalizer &propertyExtractor){
     double step_length = 1;
 
 	//Get the eigenvalues.
@@ -579,9 +579,11 @@ void fixDensity(PropertyExtractor::Diagonalizer &propertyExtractor, bool multipl
 bool self_consistency_callback(Solver::Diagonalizer &solver){
 	PropertyExtractor::Diagonalizer propertyExtractor(solver);
 
-	fixDensity(propertyExtractor, k_multiplicity);
+	if(!k_multiplicity){
+        fixDensity(propertyExtractor);
+    }
 
-	Array<double> old_spin_and_site_resolved_density
+    Array<double> old_spin_and_site_resolved_density
 		= spin_and_site_resolved_density;
 
 	//Calculate the spin and site resolved density. Note that the k-indices
@@ -602,7 +604,7 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 
             }
             std::cout << std::boolalpha;
-            std::cout << "Total spin density for spin " << spin_ << total_spin_density << '\n';
+            std::cout << "Total spin density for spin " << spin_ << " is " << total_spin_density << '\n';
         }
     }
 
@@ -660,7 +662,7 @@ int main(int argc, char *argv[]){
     double threshold { 1.7 };
     bool hubbard { false };
     double temperature { 0.01 };
-    double multiplicity { 0.0 };
+    int multiplicity { 0 };
 
     scf_convergence.open("scf_convergence.txt");
     //scf_convergence << "run,iteration,error" << std::endl;
