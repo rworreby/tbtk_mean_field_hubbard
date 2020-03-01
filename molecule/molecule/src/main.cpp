@@ -594,6 +594,11 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 		{IDX_ALL, IDX_ALL}
 	});
 
+    for(unsigned int spin = 0; spin < 2; spin++){
+		for(unsigned int site = 0; site < k_num_atoms; site++){
+            std::cout << "Density of spin: " << spin << " and site: " << site << " is: " << density({site, spin}) << '\n';
+        }
+    }
 
     static int print_count = 0;
     if(print_count++ < 3){
@@ -604,7 +609,7 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 
             }
             std::cout << std::boolalpha;
-            std::cout << "Total spin density for spin " << spin_ << " is " << total_spin_density << '\n';
+            std::cout << "Total spin for spin " << spin_ << " is " << total_spin_density << '\n';
         }
     }
 
