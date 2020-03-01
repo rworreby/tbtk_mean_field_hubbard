@@ -9,6 +9,7 @@ print("Number of lines in file: ", num_lines)
 counter_spin_up = 0
 counter_spin_down = 0
 
+counter = 0
 for line in f:
     splitted_line = line.split(' ')
     if splitted_line[0] == 'sd':
@@ -17,6 +18,11 @@ for line in f:
         counter_spin_up += 1
     else:
         print("Error occured. Spin is neither up nor down.")
+
+    counter += 1
+    if counter > num_lines/2-1:
+        break
+
 
 print("Total spin up:   ", counter_spin_up)
 print("Total spin down: ", counter_spin_down)
