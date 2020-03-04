@@ -579,6 +579,45 @@ void fixDensity(PropertyExtractor::Diagonalizer &propertyExtractor){
 bool self_consistency_callback(Solver::Diagonalizer &solver){
 	PropertyExtractor::Diagonalizer propertyExtractor(solver);
 
+    auto eigen_values = solver.getEigenValues();
+    static int temp = 1;
+    if(temp++ == 1){
+        for(int i = 0; i < model.getBasisSize(); ++i){
+          std::cout << eigen_values[i] << " ";
+        }
+    }
+
+
+    /** Pseudo code:
+    Property::Density density = Null
+    n_s0 = 10
+    n_s1 = 12
+
+    spin_occs = [n_s0, n_s1]
+
+    for i_spin in range(2):
+        for i_eval in range(num_eigenvalues):
+            if i_eval > spin_occs[i_spin]:
+                break
+            //eval = eigenvalues[spin=0][i_eval]
+            evec = eigenvectors[i_spin][i_eval]
+
+    density[i_spin] += evec
+    **/
+
+
+    /**
+    auto eigen_vectors = solver.getEigenVectors();
+    auto eigen_values = solver.getEigenValues();
+    int basisSize = model.getBasisSize();
+    for(int i = 0; i < basisSize; ++i){
+      myfile << eigen_values[i] << " ";
+      for(int j = 0; j < basisSize; ++j)
+          myfile << eigen_vectors[i*basisSize + j] << " ";
+      myfile << '\n';
+    }
+    **/
+
 	if(!k_multiplicity){
         fixDensity(propertyExtractor);
     }
