@@ -41,7 +41,6 @@ c++ molecule_meanfield_hubbard.cpp -o main && ./main clars_goblet.xyz -t 1.8 -b 
 //#include "molecule_meanfield_hubbard.hpp"
 
 using comperator_t = std::function<bool(double, double)>;
-using cartesian_grid_t = std::multiset<int, std::pair<double, double>>;
 using bonds_t = std::vector<std::pair<int, int>>;
 using ss_t = std::string::size_type;
 using std::string;
@@ -60,7 +59,7 @@ double spin_and_site_resolved_density_tol{ 1e-5 };
 double k_density_tolerance{ 1e-7 };
 double k_target_density_per_site{ 1.0 };
 double k_mixing_parameter{ 0.5 };
-bool k_multiplicity{ false };
+int k_multiplicity{ 0 };
 Model model;
 Array<double> spin_and_site_resolved_density;
 size_t k_num_atoms{ 0 };
@@ -77,6 +76,20 @@ unsigned int debug_var = 0;
 
 #define PRINTVAR(x) std::cout << #x << " = " << (x) << std::endl;
 void print_help(bool full);
+
+struct Eigenstate{
+    double eigenvalue;
+    bool spin_channel;
+    std::vector<complex<double>> eigenvector;
+
+    friend std::ostream& operator<<(std::ostream& out, Eigenstate es){
+        out << es.spin_channel << " " << es.eigenvalue << " ";
+        for(auto val : es.eigenvector){
+            out << "(" << val.real() << ", " << val.imag() << ") ";
+        }
+        return out;
+    }
+};
 
 struct XYZCoordinate{
     float x;
@@ -580,14 +593,93 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 	PropertyExtractor::Diagonalizer propertyExtractor(solver);
 
     auto eigen_values = solver.getEigenValues();
-    static int temp = 1;
-    if(temp++ == 1){
-        for(int i = 0; i < model.getBasisSize(); ++i){
-          std::cout << eigen_values[i] << " ";
+    auto eigen_vectors = solver.getEigenVectors();
+
+    std::vector<Eigenstate> eigenstates;
+    const int basis_size = model.getBasisSize();
+
+    for(int i = 0; i < basis_size; ++i){
+
+        bool state {false};
+        double eval {eigen_values[i]};
+        std::vector<complex<double>> evec;
+
+        complex<double> spin_up {0.0, 0.0};
+        complex<double> spin_down {0.0, 0.0};
+
+        for (size_t j = 0; j < basis_size; j+=2) {
+            spin_down += std::abs(eigen_vectors[i*basis_size + j]);
+        }
+        for (size_t j = 1; j < basis_size; j+=2) {
+            spin_up += std::abs(eigen_vectors[i*basis_size + j]);
+        }
+        bool up_greater_than_down { std::abs(spin_up.real()) > std::abs(spin_down.real()) };
+        //std::cout << "domination spin:" << odd_greater_than_even << '\n';
+        state = up_greater_than_down;
+
+        if(up_greater_than_down){
+            for (size_t j = 1; j < basis_size; j+=2) {
+                evec.push_back(eigen_vectors[i*basis_size + j]);
+            }
+        }
+        else{
+            for (size_t j = 0; j < basis_size; j+=2) {
+                evec.push_back(eigen_vectors[i*basis_size + j]);
+            }
+        }
+        eigenstates.push_back({eval, state, evec});
+    }
+    // std::cout << "EIGENSTATES: " << '\n';
+    // std::cout << eigenstates.size() << '\n';
+    // std::cout << eigenstates[0] << '\n';
+    // std::cout << eigenstates[1] << '\n';
+    // std::cout << eigenstates[2] << '\n';
+
+    // Multiplicity m = 2*S + 1
+    // m = 1 --> S = 0
+    // m = 3 --> S = 1
+
+    int atoms_per_spin_channel {basis_size / 4};
+
+    int atoms_spin_up {atoms_per_spin_channel};
+    int atoms_spin_down {atoms_per_spin_channel};
+
+    int spin_change {(k_multiplicity-1)/2};
+    atoms_spin_up += spin_change;
+    atoms_spin_down -= spin_change;
+
+    std::cout << "atoms spin up: " << atoms_spin_up << '\n';
+    std::cout << "atoms spin down: " << atoms_spin_down << '\n';
+
+    int counter_up {0};
+    int counter_down {0};
+    std::vector<complex<double>> curr_density(basis_size/2, {0.0, 0.0});
+    
+    for (size_t i = 0; i < 2; i++) {
+        for (size_t j = 0; j < basis_size; j++) {
+            if(!eigenstates[j].spin_channel){
+                counter_down += 1;
+                if(counter_down > atoms_spin_down){
+                    continue;
+                }
+            }
+            else{
+                counter_up += 1;
+                if(counter_up > atoms_spin_up){
+                    continue;
+                }
+            }
+            for (size_t k = 0; k < basis_size/2; k++) {
+                curr_density[k] += eigenstates[j].eigenvector[k];
+            }
+
         }
     }
 
-
+    std::cout << "Current density:" << '\n';
+    for (size_t i = 0; i < basis_size/2; i++) {
+        std::cout << curr_density[i] << '\n';
+    }
     /** Pseudo code:
     Property::Density density = Null
     n_s0 = 10
@@ -633,11 +725,11 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 		{IDX_ALL, IDX_ALL}
 	});
 
-    for(unsigned int spin = 0; spin < 2; spin++){
-		for(unsigned int site = 0; site < k_num_atoms; site++){
-            std::cout << "Density of spin: " << spin << " and site: " << site << " is: " << density({site, spin}) << '\n';
-        }
-    }
+    // for(unsigned int spin = 0; spin < 2; spin++){
+	// 	for(unsigned int site = 0; site < k_num_atoms; site++){
+    //         std::cout << "Density of spin: " << spin << " and site: " << site << " is: " << density({site, spin}) << '\n';
+    //     }
+    // }
 
     static int print_count = 0;
     if(print_count++ < 3){
@@ -647,8 +739,8 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
                 total_spin_density += spin_and_site_resolved_density[{spin_, site}];
 
             }
-            std::cout << std::boolalpha;
-            std::cout << "Total spin for spin " << spin_ << " is " << total_spin_density << '\n';
+            // std::cout << std::boolalpha;
+            // std::cout << "Total spin for spin " << spin_ << " is " << total_spin_density << '\n';
         }
     }
 
@@ -739,7 +831,7 @@ int main(int argc, char *argv[]){
             }
             if(!strcmp(argv[i], "-M") || !strcmp(argv[i], "--multiplicity")){
                 multiplicity = std::stod(argv[++i]);
-                k_multiplicity = multiplicity; //casting
+                k_multiplicity = multiplicity;
                 if(temperature != 0.01){
                     std::cout << "Setting temperature to 0." << '\n';
                 }
