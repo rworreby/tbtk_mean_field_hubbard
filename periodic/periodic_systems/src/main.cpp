@@ -344,6 +344,10 @@ void initSpinAndSiteResolvedDensity(Array<double>& spinAndSiteResolvedDensity){
 complex<double> H_U(const Index &toIndex, const Index &fromIndex){
 	unsigned int spin = fromIndex[1];
 	int site = fromIndex[0];
+
+    // PRINTVAR((spin + 1)%2);
+    // PRINTVAR(site);
+
 	return U*spinAndSiteResolvedDensity[{(spin + 1)%2, site}];
 }
 
@@ -434,6 +438,17 @@ void fixDensity(PropertyExtractor::BlockDiagonalizer &propertyExtractor){
 bool selfConsistencyCallbackPeriodic(Solver::BlockDiagonalizer &solver){
 	PropertyExtractor::BlockDiagonalizer propertyExtractor(solver);
 
+
+    for (int k = 15; k < 20; k++) {
+        std::cout << "Eigenvalues for k = " << k << '\n';
+        for (int spin = 0; spin < 2; spin++) {
+
+            //for(size_t i = 0; i < 2; ++i){
+                std::cout << propertyExtractor.getEigenValue({k, 0, 0, spin}, 0) << "\n";
+            //}
+        }
+    }
+
 	//Fix the density.
 	fixDensity(propertyExtractor);
 
@@ -450,6 +465,7 @@ bool selfConsistencyCallbackPeriodic(Solver::BlockDiagonalizer &solver){
 	    {IDX_SUM_ALL, IDX_SUM_ALL, IDX_SUM_ALL, IDX_ALL, IDX_ALL}
     });
 
+
 	//Update the spin and site resolved density. Mix with the previous
 	//value to stabilize the self-consistent calculation.
     for(unsigned int spin = 0; spin < 2; spin++){
@@ -464,8 +480,26 @@ bool selfConsistencyCallbackPeriodic(Solver::BlockDiagonalizer &solver){
 					(int)spin,
                     (int)site
 				}); ///(model.getBasisSize()/k_num_atoms);
+            PRINTVAR(density({
+                IDX_SUM_ALL,
+                IDX_SUM_ALL,
+                IDX_SUM_ALL,
+                (int)spin,
+                (int)site
+            }));
 		}
 	}
+
+
+    for (int k = 15; k < 20; k++) {
+        std::cout << "Eigenvalues for k = " << k << '\n';
+        for (int spin = 0; spin < 2; spin++) {
+
+            //for(size_t i = 0; i < 2; ++i){
+                std::cout << propertyExtractor.getEigenValue({k, 0, 0, spin}, 0) << "\n";
+            //}
+        }
+    }
 
 	//Calculate the maximum difference between the new and old spin and
 	//site resolved density.
@@ -485,11 +519,13 @@ bool selfConsistencyCallbackPeriodic(Solver::BlockDiagonalizer &solver){
 		}
 	}
 
-    //std::cout << "Conv. difference:"
-                //<< std::abs(maxDifference - spin_and_site_resolved_density_tol)
-                //<< "\tabs. value: "
-                //<< spinAndSiteResolvedDensity[{max_spin, max_site}]
-                //<< "\tlocation: " << max_spin << " " << max_site << '\n';
+    static int iteration = 0;
+    std::cout << "Iteration number: " << ++iteration << '\n';
+    std::cout << "Conv. difference:"
+                << std::abs(maxDifference - spin_and_site_resolved_density_tol)
+                << "\tabs. value: "
+                << spinAndSiteResolvedDensity[{max_spin, max_site}]
+                << "\tlocation: " << max_spin << " " << max_site << '\n';
 
 	//Return whether the spin and site resolved density has converged. The
 	//self-consistent loop will stop once true is returned.
@@ -582,8 +618,8 @@ int main(int argc, char **argv) {
     //Set the natural units for this calculation.
 	UnitHandler::setScales({"1 C", "1 pcs", "1 eV", "1 Ao", "1 K", "1 s"});
 
-    const size_t k_brillouin_zone_res = 1000;
-	const int k_points_per_path = k_brillouin_zone_res / 5;
+    const size_t k_brillouin_zone_res = 20;
+	const int k_points_per_path = k_brillouin_zone_res; // / 5;
 	vector<unsigned int> numMeshPoints = {
 		k_points_per_path,
         1,
@@ -851,27 +887,26 @@ int main(int argc, char **argv) {
         //that will be used in this algorithm.
         hamiltonian[{row, column}] += amplitude;
     }
+
     // Print the Hamiltonian
-    std::cout << "Hamiltonian iteration 0:" << '\n';
-    for(unsigned int row = 0; row < atoms_in_unit_cell.size(); row++){
-        for(unsigned int column = 0; column < atoms_in_unit_cell.size(); column++){
+    std::cout << "Hamiltonian for k point 0:" << '\n';
+    for(unsigned int row = 0; row < atoms_in_unit_cell.size()*2; row++){
+        for(unsigned int column = 0; column < atoms_in_unit_cell.size()*2; column++){
             Streams::out << real(hamiltonian[{row, column}])
                 << "\t";
         }
         Streams::out << "\n";
     }
     std::cout << '\n';
-    std::cout << "Hamiltonian iteration 3:" << '\n';
-    unsigned int twice_uc = atoms_in_unit_cell.size() * 2;
-    for(unsigned int row = twice_uc; row < twice_uc + atoms_in_unit_cell.size(); row++){
-        for(unsigned int column = twice_uc; column < twice_uc + atoms_in_unit_cell.size(); column++){
+    std::cout << "Hamiltonian for k point 1:" << '\n';
+    unsigned int twice_uc = 2 * atoms_in_unit_cell.size() * 1;
+    for(unsigned int row = twice_uc; row < twice_uc + atoms_in_unit_cell.size() * 2; row++){
+        for(unsigned int column = twice_uc; column < twice_uc + atoms_in_unit_cell.size() * 2; column++){
             Streams::out << real(hamiltonian[{row, column}])
                 << "\t";
         }
         Streams::out << "\n";
     }
-
-
 
 	Solver::BlockDiagonalizer solver;
 	solver.setModel(model);
@@ -889,10 +924,22 @@ int main(int argc, char **argv) {
     }
 
 	PropertyExtractor::BlockDiagonalizer propertyExtractor(solver);
+
+    for (int k = 15; k < 20; k++) {
+        std::cout << "Eigenvalues for k = " << k << '\n';
+        for (int spin = 0; spin < 2; spin++) {
+
+            //for(size_t i = 0; i < 2; ++i){
+                std::cout << propertyExtractor.getEigenValue({k, 0, 0, spin}, 0) << "\n";
+            //}
+        }
+    }
+
 	Property::DOS dos = propertyExtractor.calculateDOS();
 
     Vector3d lowest({-M_PI / periodicity_distance, 0, 0});
     Vector3d highest({M_PI / periodicity_distance, 0, 0});
+
 
     double x_diff_test = whole_molecule.get_x_coords(0)
             - whole_molecule.get_x_coords(1);
@@ -906,6 +953,7 @@ int main(int argc, char **argv) {
     vector<vector<Vector3d>> paths = {
         {lowest, highest}
     };
+
 
 	Range interpolator(0, 1, k_points_per_path);
 
@@ -939,14 +987,24 @@ int main(int argc, char **argv) {
                 numMeshPoints
 			);
 
-            for(unsigned int spin = 0; spin < 2; ++spin){
-                for(size_t i = 0; i < atoms_in_unit_cell.size(); ++i){
-                    myfile << propertyExtractor.getEigenValue(kIndex, atoms_in_unit_cell[i]);
-                    if(i != atoms_in_unit_cell.size()-1)
-                        myfile << ", ";
-                    else{
-                        myfile << std::endl;
-                    }
+            // std::cout << propertyExtractor.getEigenValue({5,0,0,1}, 1) << '\n';
+            // std::cout << propertyExtractor.getEigenValue({5,0,0,0}, 1) << '\n';
+            for (int k = 15; k < 20; k++) {
+                std::cout << "Eigenvalues for k = " << k << '\n';
+                for (int spin = 0; spin < 2; spin++) {
+
+                    //for(size_t i = 0; i < 2; ++i){
+                        std::cout << propertyExtractor.getEigenValue({k, 0, 0, spin}, 1) << "\n";
+                    //}
+                }
+            }
+
+            for(size_t i = 0; i < atoms_in_unit_cell.size(); ++i){
+                myfile << propertyExtractor.getEigenValue({kIndex[0], kIndex[1], kIndex[2], 0}, new_atoms_in_unit_cell[i]);
+                if(i != atoms_in_unit_cell.size()-1)
+                    myfile << ", ";
+                else{
+                    myfile << std::endl;
                 }
             }
 		}
