@@ -55,14 +55,15 @@ void print_help(bool full);
 complex<double> H_U(const Index &toIndex, const Index &fromIndex);
 
 std::complex<double> i(0, 1);
-double U { 0.0 };
-double spin_and_site_resolved_density_tol { 1e-5 };
-double k_density_tolerance { 1e-7 };
-double k_target_density_per_site { 1.0 };
-double k_mixing_parameter { 0.5 };
+double U{ 0.0 };
+double spin_and_site_resolved_density_tol{ 1e-5 };
+double k_density_tolerance{ 1e-7 };
+double k_target_density_per_site{ 1.0 };
+double k_mixing_parameter{ 0.5 };
+bool k_multiplicity{ false };
 Model model;
 Array<double> spin_and_site_resolved_density;
-size_t k_num_atoms { 0 };
+size_t k_num_atoms{ 0 };
 
 
 ofstream scf_convergence;
@@ -578,9 +579,50 @@ void fixDensity(PropertyExtractor::Diagonalizer &propertyExtractor){
 bool self_consistency_callback(Solver::Diagonalizer &solver){
 	PropertyExtractor::Diagonalizer propertyExtractor(solver);
 
-	fixDensity(propertyExtractor);
+    auto eigen_values = solver.getEigenValues();
+    // static int temp = 1;
+    // if(temp++ == 1){
+    //     for(int i = 0; i < model.getBasisSize(); ++i){
+    //       std::cout << eigen_values[i] << " ";
+    //     }
+    // }
 
-	Array<double> old_spin_and_site_resolved_density
+
+    /** Pseudo code:
+    Property::Density density = Null
+    n_s0 = 10
+    n_s1 = 12
+
+    spin_occs = [n_s0, n_s1]
+
+    for i_spin in range(2):
+        for i_eval in range(num_eigenvalues):
+            if i_eval > spin_occs[i_spin]:
+                break
+            //eval = eigenvalues[spin=0][i_eval]
+            evec = eigenvectors[i_spin][i_eval]
+
+    density[i_spin] += evec
+    **/
+
+
+    /**
+    auto eigen_vectors = solver.getEigenVectors();
+    auto eigen_values = solver.getEigenValues();
+    int basisSize = model.getBasisSize();
+    for(int i = 0; i < basisSize; ++i){
+      myfile << eigen_values[i] << " ";
+      for(int j = 0; j < basisSize; ++j)
+          myfile << eigen_vectors[i*basisSize + j] << " ";
+      myfile << '\n';
+    }
+    **/
+    std::cout << "k mult: " << k_multiplicity << '\n';
+	if(!k_multiplicity){
+        fixDensity(propertyExtractor);
+    }
+
+    Array<double> old_spin_and_site_resolved_density
 		= spin_and_site_resolved_density;
 
 	//Calculate the spin and site resolved density. Note that the k-indices
@@ -590,6 +632,25 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 	Property::Density density = propertyExtractor.calculateDensity({
 		{IDX_ALL, IDX_ALL}
 	});
+
+    // for(unsigned int spin = 0; spin < 2; spin++){
+	// 	for(unsigned int site = 0; site < k_num_atoms; site++){
+    //         std::cout << "Density of spin: " << spin << " and site: " << site << " is: " << density({site, spin}) << '\n';
+    //     }
+    // }
+
+    static int print_count = 0;
+    if(print_count++ < 3){
+        for (size_t spin_ = 0; spin_ < 2; spin_++) {
+            double total_spin_density = 0;
+            for (size_t site = 0; site < k_num_atoms; site++) {
+                total_spin_density += spin_and_site_resolved_density[{spin_, site}];
+
+            }
+            std::cout << std::boolalpha;
+            std::cout << "Total spin for spin " << spin_ << " is " << total_spin_density << '\n';
+        }
+    }
 
 	//Update the spin and site resolved density. Mix with the previous
 	//value to stabilize the self-consistent calculation.
@@ -644,6 +705,8 @@ int main(int argc, char *argv[]){
     complex<double> t { 1.0 };
     double threshold { 1.7 };
     bool hubbard { false };
+    double temperature { 0.01 };
+    int multiplicity { 0 };
 
     scf_convergence.open("scf_convergence.txt");
     //scf_convergence << "run,iteration,error" << std::endl;
@@ -671,6 +734,17 @@ int main(int argc, char *argv[]){
                 U = std::stod(argv[++i]);
                 hubbard = U;
             }
+            if(!strcmp(argv[i], "-T") || !strcmp(argv[i], "--temperature")){
+                temperature = std::stod(argv[++i]);
+            }
+            if(!strcmp(argv[i], "-M") || !strcmp(argv[i], "--multiplicity")){
+                multiplicity = std::stod(argv[++i]);
+                k_multiplicity = multiplicity; //casting
+                if(temperature != 0.01){
+                    std::cout << "Setting temperature to 0." << '\n';
+                }
+                temperature = 0;
+            }
             if(!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")){
                 print_help(true); exit(0);
             }
@@ -680,6 +754,10 @@ int main(int argc, char *argv[]){
             print_help(false); exit(0);
         }
     }
+    if(multiplicity && temperature){
+        std::cout << "Invalid parameter combination. Cannot use both temperature and multiplicity as inputs at the same time." << '\n';
+        print_help(false); exit(0);
+    }
     bool periodic = false;
     if(periodicity_direction != ""){
         periodic = true;
@@ -687,7 +765,8 @@ int main(int argc, char *argv[]){
 
     std::cout << "Variable values: " << '\n';
     PRINTVAR(periodicity_direction); PRINTVAR(periodicity_distance);
-    PRINTVAR(t); PRINTVAR(threshold); PRINTVAR(U); PRINTVAR(periodic);
+    PRINTVAR(t); PRINTVAR(threshold); PRINTVAR(hubbard); //PRINTVAR(periodic);
+    PRINTVAR(temperature); PRINTVAR(multiplicity);
 
     //Usage example
     Molecule example_mol;
@@ -728,11 +807,15 @@ int main(int argc, char *argv[]){
 	solver.run();
 
     if(hubbard) std::cout << "Final chemical potential: " << model.getChemicalPotential() << '\n';
-	//Create PropertyExtractor
+
 	PropertyExtractor::Diagonalizer pe(solver);
 
     auto eigen_vectors = solver.getEigenVectors();
 	auto eigen_values = solver.getEigenValues();
+
+    for(int i = 0; i < model.getBasisSize(); ++i){
+        std::cout << eigen_values[i] << " ";
+    }
 
 	int basisSize = model.getBasisSize();
 	ofstream myfile;
@@ -770,15 +853,26 @@ void print_help(bool full){
         printf("/**********************************************************************/\n");
         printf("// Tight-Binding and Mean-Field Hubbard approximation                 //\n");
         printf("// Bachelor's thesis, Spring Semester 2019, ETH Zurich                //\n");
-        printf("// Author: Robin Worreby                                             //\n");
+        printf("// Author: Robin Worreby                                              //\n");
         printf("// License: Use if you like, but give me credit.                      //\n");
         printf("/**********************************************************************/\n");
         printf("\n");
     }
-    printf("Usage: \n./Application molecule.xyz [parameters]\nPossible parameters:\n");
-    printf("  -p or --periodic \t\t- sets the periodicity direction and distance, two parameters needed [X, Y, Z] and [distance].\n Currently only X-direction is supported.");
-    printf("  -t or --hopping_amplitude \t- sets the Hamiltonian parameter t value (Hopping amplitude), default is 1.0\n");
+    printf("Usage: \n./Application molecule.xyz [parameters] \nPossible parameters:\n");
+    printf("  -p or --periodic \t\t- sets the periodicity direction and distance, \n\
+            \t\t\t  two parameters needed [X, Y, Z] and [distance]. \n\
+            \t\t\t  Currently only X-direction is supported.\n");
+    printf("  -t or --hopping_amplitude \t- sets the Hamiltonian parameter \n\
+            \t\t\t  t value (Hopping amplitude), default is 1.0\n");
     printf("  -b or --bond_threshold \t- sets the bond threshold in Ångström\n");
-    printf("  -H or --Hubbard \t\t- sets the Hamiltonian parameter U, default is 0.0 \n");
+    printf("  -H or --Hubbard \t\t- sets the Hamiltonian parameter U, \n\
+            \t\t\t  default is 0.0 \n");
+    printf("  -T or --temperature \t\t- sets the temperature for the system in K, \n\
+            \t\t\t  default is 0.01 K. \n\
+            \t\t\t  This is mutually exclusive with the -M (multiplicity) parameter. \n");
+    printf("  -M or --multiplicity \t\t- sets the multiplicity, \n\
+            \t\t\t  i.e. the solution that is to be found. \n\
+            \t\t\t  Default is no specific solution desired. \n\
+            \t\t\t  This is mutually exclusive with the -T (temperature) parameter. \n");
     printf("  -h or --help \t\t\t- prints this help info.\n");
 }
