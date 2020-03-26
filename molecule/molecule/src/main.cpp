@@ -61,6 +61,7 @@ double k_density_tolerance{ 1e-7 };
 double k_target_density_per_site{ 1.0 };
 double k_mixing_parameter{ 0.5 };
 bool k_multiplicity{ false };
+double k_temperature{ 0.01 };
 Model model;
 Array<double> spin_and_site_resolved_density;
 size_t k_num_atoms{ 0 };
@@ -295,7 +296,7 @@ Model create_hamiltonian(Molecule mol, Bonds bonds, complex<double> t, bool hubb
         }
     }
     model.construct();
-	model.setTemperature(0.001);
+	model.setTemperature(k_temperature);
 
     std::cout << "Model size in create_hamiltonian: " << model.getBasisSize() << std::endl;
     return model;
@@ -465,7 +466,7 @@ private:
 
     static double threshold;
 };
-double Postprocessor::threshold = 1e-9;
+double Postprocessor::threshold = 1e-7;
 
 
 /** Start self consistet mean-field Hubbard **/
@@ -581,11 +582,13 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 
     auto eigen_values = solver.getEigenValues();
     static int temp = 1;
+    std::cout << '\n';
     if(temp++ == 1){
         for(int i = 0; i < model.getBasisSize(); ++i){
           std::cout << eigen_values[i] << " ";
         }
     }
+    std::cout << '\n';
 
 
     /** Pseudo code:
@@ -594,7 +597,7 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
     n_s1 = 12
 
     spin_occs = [n_s0, n_s1]
-
+t
     for i_spin in range(2):
         for i_eval in range(num_eigenvalues):
             if i_eval > spin_occs[i_spin]:
@@ -633,11 +636,11 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 		{IDX_ALL, IDX_ALL}
 	});
 
-    for(unsigned int spin = 0; spin < 2; spin++){
-		for(unsigned int site = 0; site < k_num_atoms; site++){
-            std::cout << "Density of spin: " << spin << " and site: " << site << " is: " << density({site, spin}) << '\n';
-        }
-    }
+    // for(unsigned int spin = 0; spin < 2; spin++){
+	// 	for(unsigned int site = 0; site < k_num_atoms; site++){
+    //         std::cout << "Density of spin: " << spin << " and site: " << site << " is: " << density({site, spin}) << '\n';
+    //     }
+    // }
 
     static int print_count = 0;
     if(print_count++ < 3){
@@ -705,7 +708,6 @@ int main(int argc, char *argv[]){
     complex<double> t { 1.0 };
     double threshold { 1.7 };
     bool hubbard { false };
-    double temperature { 0.01 };
     int multiplicity { 0 };
 
     scf_convergence.open("scf_convergence.txt");
@@ -735,15 +737,15 @@ int main(int argc, char *argv[]){
                 hubbard = U;
             }
             if(!strcmp(argv[i], "-T") || !strcmp(argv[i], "--temperature")){
-                temperature = std::stod(argv[++i]);
+                k_temperature = std::stod(argv[++i]);
             }
             if(!strcmp(argv[i], "-M") || !strcmp(argv[i], "--multiplicity")){
                 multiplicity = std::stod(argv[++i]);
                 k_multiplicity = multiplicity; //casting
-                if(temperature != 0.01){
+                if(k_temperature != 0.01){
                     std::cout << "Setting temperature to 0." << '\n';
                 }
-                temperature = 0;
+                k_temperature = 0;
             }
             if(!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")){
                 print_help(true); exit(0);
@@ -754,7 +756,7 @@ int main(int argc, char *argv[]){
             print_help(false); exit(0);
         }
     }
-    if(multiplicity && temperature){
+    if(multiplicity && k_temperature){
         std::cout << "Invalid parameter combination. Cannot use both temperature and multiplicity as inputs at the same time." << '\n';
         print_help(false); exit(0);
     }
@@ -766,7 +768,7 @@ int main(int argc, char *argv[]){
     std::cout << "Variable values: " << '\n';
     PRINTVAR(periodicity_direction); PRINTVAR(periodicity_distance);
     PRINTVAR(t); PRINTVAR(threshold); PRINTVAR(hubbard); //PRINTVAR(periodic);
-    PRINTVAR(temperature); PRINTVAR(multiplicity);
+    PRINTVAR(k_temperature); PRINTVAR(multiplicity);
 
     //Usage example
     Molecule example_mol;
