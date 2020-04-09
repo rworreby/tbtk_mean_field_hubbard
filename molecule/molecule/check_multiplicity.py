@@ -12,6 +12,10 @@ counter_spin_down = 0
 counter = 0
 for line in f:
     splitted_line = line.split(' ')
+
+    if float(splitted_line[1]) > 0:
+        break
+
     if splitted_line[0] == 'sd':
         counter_spin_down += 1
     elif splitted_line[0] == 'su':
@@ -19,9 +23,8 @@ for line in f:
     else:
         print("Error occured. Spin is neither up nor down.")
 
-    counter += 1
-    if counter > num_lines/2-1:
-        break
+    #counter += 1
+
 
 
 print("Total spin up:   ", counter_spin_up)
