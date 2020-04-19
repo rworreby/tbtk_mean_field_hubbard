@@ -26,6 +26,5 @@ for line in f:
     #counter += 1
 
 
-
 print("Total spin up:   ", counter_spin_up)
 print("Total spin down: ", counter_spin_down)

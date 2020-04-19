@@ -475,7 +475,11 @@ double Postprocessor::threshold = 1e-7;
 //and 1.
 void init_spin_and_site_resolved_density(Array<double>& spin_and_site_resolved_density){
 	srand(time(nullptr));
+<<<<<<< Updated upstream
 	for(unsigned int spin = 0; spin < 2; spin++){
+=======
+    for(unsigned int spin = 0; spin < 2; spin++){
+>>>>>>> Stashed changes
 		if(spin){
             for(unsigned int site = 0; site < k_num_atoms; site++){
     			spin_and_site_resolved_density[
