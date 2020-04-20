@@ -488,13 +488,23 @@ double Postprocessor::threshold = 1e-9;
 void init_spin_and_site_resolved_density(Array<double>& spin_and_site_resolved_density){
 	srand(time(nullptr));
 	for(unsigned int spin = 0; spin < 2; spin++){
-		for(unsigned int site = 0; site < k_num_atoms; site++){
-			spin_and_site_resolved_density[
-				{spin, site}
-			] = (rand()%100)/100.0;
-		}
-	}
+        if(spin){
+            for(unsigned int site = 0; site < k_num_atoms; site++){
+                spin_and_site_resolved_density[
+                    {spin, site}
+                ] = (rand()%100)/100.0; //0.0; //
+            }
+        }
+        else{
+            for(unsigned int site = 0; site < k_num_atoms; site++){
+                spin_and_site_resolved_density[
+                    {spin, site}
+                ] = (rand()%100)/100.0; //1.0; //
+            }
+        }
+    }
 }
+
 
 //Callback function responsible for returning the current value of H_U for the
 //given indices. Since H_U is supposed to be diagonal, toIndex and fromIndex is
@@ -656,38 +666,39 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 
     //TODO: fix for even multiplicity (doublet, quartet, ...)
 
-    int atoms_spin_up {atoms_per_spin_channel};
-    int atoms_spin_down {atoms_per_spin_channel};
+    int electrons_spin_up {atoms_per_spin_channel};
+    int electrons_spin_down {atoms_per_spin_channel};
 
     int spin_change {(k_multiplicity-1)/2};
-    atoms_spin_up += spin_change;
-    atoms_spin_down -= spin_change;
+    electrons_spin_up += spin_change;
+    electrons_spin_down -= spin_change;
 
-    std::cout << "atoms spin up: " << atoms_spin_up << '\n';
-    std::cout << "atoms spin down: " << atoms_spin_down << '\n';
+    std::cout << "electrons spin up: " << electrons_spin_up << '\n';
+    std::cout << "electrons spin down: " << electrons_spin_down << '\n';
 
     int counter_up {0};
     int counter_down {0};
-    std::vector<complex<double>> density_up(basis_size/2, {0.0, 0.0});
-    std::vector<complex<double>> density_down(basis_size/2, {0.0, 0.0});
+    std::vector<double> density_up(basis_size/2, 0.0);
+    std::vector<double> density_down(basis_size/2, 0.0);
 
     for (size_t j = 0; j < basis_size; j++){
         if(!eigenstates[j].spin_channel){
             counter_down += 1;
-            if(counter_down > atoms_spin_down){
+            if(counter_down > electrons_spin_down){
                 continue;
             }
             for (size_t k = 0; k < basis_size/2; k++){
-                density_down[k] += eigenstates[j].eigenvector[k];
+                density_down[k] += std::norm(eigenstates[j].eigenvector[k]);
+                //TODO: Square eigenstates[j].eigenvector[k]
             }
         }
         else{
             counter_up += 1;
-            if(counter_up > atoms_spin_up){
+            if(counter_up > electrons_spin_up){
                 continue;
             }
             for (size_t k = 0; k < basis_size/2; k++){
-                density_up[k] += eigenstates[j].eigenvector[k];
+                density_up[k] += std::norm(eigenstates[j].eigenvector[k]);
             }
         }
     }
@@ -756,14 +767,14 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
         spin_and_site_resolved_density[{0, site}]
             = k_mixing_parameter*spin_and_site_resolved_density[
                 {0, site}
-            ] + (1 - k_mixing_parameter)*density_down[site].real(); ///(model.getBasisSize()/k_num_atoms);
+            ] + (1 - k_mixing_parameter)*density_down[site]; ///(model.getBasisSize()/k_num_atoms);
 
     }
     for(unsigned int site = 0; site < k_num_atoms; site++){
         spin_and_site_resolved_density[{1, site}]
     		= k_mixing_parameter*spin_and_site_resolved_density[
     			{1, site}
-    		] + (1 - k_mixing_parameter)*density_up[site].real();///(model.getBasisSize()/k_num_atoms);
+    		] + (1 - k_mixing_parameter)*density_up[site];///(model.getBasisSize()/k_num_atoms);
 
     }
 
