@@ -61,6 +61,7 @@ double k_target_density_per_site{ 1.0 };
 double k_mixing_parameter{ 0.5 };
 double k_temperature{ 0.001 };
 int k_multiplicity{ 0 };
+int k_initial_guess{ 0101 };
 Model model;
 Array<double> spin_and_site_resolved_density;
 size_t k_num_atoms{ 0 };
@@ -483,6 +484,26 @@ private:
 double Postprocessor::threshold = 1e-9;
 
 
+double get_initial_guess(bool spin){
+    switch(k_initial_guess){
+        case 0:
+            return 0;
+            break;
+        case 1:
+            return 1;
+            break;
+        case 10:
+            return spin;
+            break;
+        case 1010:
+            return (rand()%100)/100.0;
+            break;
+        default:
+            return (rand()%100)/100.0;
+    }
+}
+
+
 /** Start self consistet mean-field Hubbard **/
 
 //Initialize the spin and site resolved density with random numbers between 0
@@ -494,14 +515,14 @@ void init_spin_and_site_resolved_density(Array<double>& spin_and_site_resolved_d
             for(unsigned int site = 0; site < k_num_atoms; site++){
                 spin_and_site_resolved_density[
                     {spin, site}
-                ] = (rand()%100)/100.0; //0.0; //
+                ] = get_initial_guess(spin);
             }
         }
         else{
             for(unsigned int site = 0; site < k_num_atoms; site++){
                 spin_and_site_resolved_density[
                     {spin, site}
-                ] = (rand()%100)/100.0; //1.0; //
+                ] = get_initial_guess(spin);
             }
         }
     }
@@ -856,6 +877,24 @@ int main(int argc, char *argv[]){
                     std::cout << "Setting temperature to 0." << '\n';
                 }
                 k_temperature = 0;
+            }
+            if(!strcmp(argv[i], "-ig") || !strcmp(argv[i], "--initial_guess")){
+                string ig = argv[++i];
+                if(ig == "zero"){
+                    k_initial_guess = 0;
+                }
+                else if(ig == "one"){
+                    k_initial_guess = 1;
+                }
+                else if(ig == "random"){
+                    k_initial_guess = 1010;
+                }
+                else if(ig == "zeroone"){
+                    k_initial_guess = 10;
+                }
+                else{
+                    k_initial_guess = 1010;
+                }
             }
             if(!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")){
                 print_help(true); exit(0);
