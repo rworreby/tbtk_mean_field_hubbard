@@ -639,25 +639,14 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
         }
         eigenstates.push_back({eval, state, evec});
     }
-    std::cout << "eigenstates: " << '\n';
-    std::cout << eigenstates.size() << '\n';
-    std::cout << eigenstates[0] << '\n';
-    std::cout << eigenstates[1] << '\n';
-    std::cout << eigenstates[2] << '\n';
 
-    /**
-1 -5.53285 (-0.149874, 0) (-0.0583824, -0) (-0.0451937, 0) (-0.0434483, -0) (-0.100715, 0) (-0.164047, -0) (-0.0759364,
--0) (-0.058536, -0) (-0.102659, 0) (-0.186607, -0) (-0.381622, 0) (-0.493224, -0) (-0.250116, 0) (-0.395748, 0) (-0.1709
-26, -0) (-0.140482, 0) (-0.212479, -0) (-0.161411, -0) (-0.222203, 0) (-0.301556, -0) (-0.0868083, -0) (-0.0501325, 0)
+    // std::cout << "eigenstates: " << '\n';
+    // std::cout << eigenstates.size() << '\n';
+    // std::cout << eigenstates[0] << '\n';
+    // std::cout << eigenstates[1] << '\n';
+    // std::cout << eigenstates[2] << '\n';
 
-0 -4.93657 (-0.116742, 0) (-0.0602901, 0) (-0.0939336, 0) (-0.127423, 0) (-0.178032, 0) (-0.176663, 0) (-0.130377, 0) (-
-0.138743, 0) (-0.202192, 0) (-0.170984, 0) (-0.358654, 0) (-0.257365, 0) (-0.250471, 0) (-0.277075, 0) (-0.16532, 0) (-0
-.176951, 0) (-0.227399, 0) (-0.385854, 0) (-0.272494, 0) (-0.300581, 0) (-0.13605, 0) (-0.108086, 0)
 
-0 -4.1254 (-0.0142727, 0) (0.0413083, 0) (0.146208, 0) (0.206943, 0) (0.23331, 0) (0.111425, 0) (0.180899, 0) (0.200347,
- 0) (0.239908, 0) (-0.198319, 0) (-0.477544, 0) (-0.163574, 0) (0.0913838, 0) (-0.127942, 0) (-0.166038, 0) (-0.278175,
-0) (-0.367759, 0) (0.323827, 0) (0.180007, 0) (0.0340759, 0) (0.131344, 0) (0.147949, 0)
-    **/
     // Multiplicity m = 2*S + 1
     // m = 1 --> S = 0
     // m = 3 --> S = 1
@@ -673,8 +662,11 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
     electrons_spin_up += spin_change;
     electrons_spin_down -= spin_change;
 
-    std::cout << "electrons spin up: " << electrons_spin_up << '\n';
-    std::cout << "electrons spin down: " << electrons_spin_down << '\n';
+    static int print_cap{ 0 };
+    if(!print_cap++){
+        std::cout << "\nelectrons spin up: " << electrons_spin_up << '\n';
+        std::cout << "electrons spin down: " << electrons_spin_down << '\n';
+    }
 
     int counter_up {0};
     int counter_down {0};
@@ -689,7 +681,6 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
             }
             for (size_t k = 0; k < basis_size/2; k++){
                 density_down[k] += std::norm(eigenstates[j].eigenvector[k]);
-                //TODO: Square eigenstates[j].eigenvector[k]
             }
         }
         else{
