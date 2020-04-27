@@ -59,10 +59,12 @@ double spin_and_site_resolved_density_tol{ 1e-5 };
 double k_density_tolerance{ 1e-7 };
 double k_target_density_per_site{ 1.0 };
 double k_mixing_parameter{ 0.5 };
+double k_temperature{ 0.001 };
 int k_multiplicity{ 0 };
 Model model;
 Array<double> spin_and_site_resolved_density;
 size_t k_num_atoms{ 0 };
+
 
 
 ofstream scf_convergence;
@@ -308,7 +310,7 @@ Model create_hamiltonian(Molecule mol, Bonds bonds, complex<double> t, bool hubb
         }
     }
     model.construct();
-	model.setTemperature(0.001);
+	model.setTemperature(k_temperature);
 
     std::cout << "Model size in create_hamiltonian: " << model.getBasisSize() << std::endl;
     return model;
@@ -699,23 +701,6 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
     //     std::cout << curr_density[i] << '\n';
     // }
 
-    /** Pseudo code:
-    Property::Density density = Null
-    n_s0 = 10
-    n_s1 = 12
-
-    spin_occs = [n_s0, n_s1]
-
-    for i_spin in range(2):
-        for i_eval in range(num_eigenvalues):
-            if i_eval > spin_occs[i_spin]:
-                break
-            //eval = eigenvalues[spin=0][i_eval]
-            evec = eigenvectors[i_spin][i_eval]
-
-            density[i_spin] += evec
-    **/
-
 
 	if(!k_multiplicity){
         fixDensity(propertyExtractor);
@@ -825,7 +810,6 @@ int main(int argc, char *argv[]){
     complex<double> t { 1.0 };
     double threshold { 1.7 };
     bool hubbard { false };
-    double temperature { 0.01 };
     int multiplicity { 0 };
 
     scf_convergence.open("scf_convergence.txt");
@@ -855,15 +839,15 @@ int main(int argc, char *argv[]){
                 hubbard = U;
             }
             if(!strcmp(argv[i], "-T") || !strcmp(argv[i], "--temperature")){
-                temperature = std::stod(argv[++i]);
+                k_temperature = std::stod(argv[++i]);
             }
             if(!strcmp(argv[i], "-M") || !strcmp(argv[i], "--multiplicity")){
                 multiplicity = std::stod(argv[++i]);
                 k_multiplicity = multiplicity;
-                if(temperature != 0.01){
+                if(k_temperature != 0.001){
                     std::cout << "Setting temperature to 0." << '\n';
                 }
-                temperature = 0;
+                k_temperature = 0;
             }
             if(!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")){
                 print_help(true); exit(0);
@@ -874,7 +858,7 @@ int main(int argc, char *argv[]){
             print_help(false); exit(0);
         }
     }
-    if(multiplicity && temperature){
+    if(multiplicity && k_temperature){
         std::cout << "Invalid parameter combination. Cannot use both temperature and multiplicity as inputs at the same time." << '\n';
         print_help(false); exit(0);
     }
@@ -886,7 +870,7 @@ int main(int argc, char *argv[]){
     std::cout << "Variable values: " << '\n';
     PRINTVAR(periodicity_direction); PRINTVAR(periodicity_distance);
     PRINTVAR(t); PRINTVAR(threshold); PRINTVAR(hubbard); //PRINTVAR(periodic);
-    PRINTVAR(temperature); PRINTVAR(multiplicity);
+    PRINTVAR(k_temperature); PRINTVAR(multiplicity);
 
     //Usage example
     Molecule example_mol;
