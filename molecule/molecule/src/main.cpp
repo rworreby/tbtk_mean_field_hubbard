@@ -607,176 +607,177 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
     auto eigen_values = solver.getEigenValues();
     auto eigen_vectors = solver.getEigenVectors();
 
-    std::vector<Eigenstate> eigenstates;
-    const int basis_size = model.getBasisSize();
-
-    for(int i = 0; i < basis_size; ++i){
-
-        bool state {false};
-        double eval {eigen_values[i]};
-        std::vector<complex<double>> evec;
-
-        complex<double> spin_up {0.0, 0.0};
-        complex<double> spin_down {0.0, 0.0};
-
-        for (size_t j = 0; j < basis_size; j+=2) {
-            spin_down += std::abs(eigen_vectors[i*basis_size + j]);
-        }
-        for (size_t j = 1; j < basis_size; j+=2) {
-            spin_up += std::abs(eigen_vectors[i*basis_size + j]);
-        }
-        bool up_greater_than_down { std::abs(spin_up.real()) > std::abs(spin_down.real()) };
-        //std::cout << "domination spin:" << odd_greater_than_even << '\n';
-        state = up_greater_than_down;
-
-        if(up_greater_than_down){
-            for (size_t j = 1; j < basis_size; j+=2) {
-                evec.push_back(eigen_vectors[i*basis_size + j]);
-            }
-        }
-        else{
-            for (size_t j = 0; j < basis_size; j+=2) {
-                evec.push_back(eigen_vectors[i*basis_size + j]);
-            }
-        }
-        eigenstates.push_back({eval, state, 0.0, evec});
-    }
-
-    // std::cout << "eigenstates: " << '\n';
-    // std::cout << eigenstates.size() << '\n';
-    // std::cout << eigenstates[0] << '\n';
-    // std::cout << eigenstates[1] << '\n';
-    // std::cout << eigenstates[2] << '\n';
-
-
-    // Multiplicity m = 2*S + 1
-    // m = 1 --> S = 0
-    // m = 3 --> S = 1
-
-    int atoms_per_spin_channel {basis_size / 4};
-
-    //TODO: fix for even multiplicity (doublet, quartet, ...)
-
-    int electrons_spin_up {atoms_per_spin_channel};
-    int electrons_spin_down {atoms_per_spin_channel};
-
-    int spin_change {(k_multiplicity-1)/2};
-    electrons_spin_up += spin_change;
-    electrons_spin_down -= spin_change;
-
-    static int print_cap{ 0 };
-    if(!print_cap++){
-        std::cout << "\nelectrons spin up: " << electrons_spin_up << '\n';
-        std::cout << "electrons spin down: " << electrons_spin_down << '\n';
-    }
-
-    int counter_up {0};
-    int counter_down {0};
-    std::vector<double> density_up(basis_size/2, 0.0);
-    std::vector<double> density_down(basis_size/2, 0.0);
-
-    for (size_t j = 0; j < basis_size; j++){
-        if(!eigenstates[j].spin_channel){
-            counter_down += 1;
-            if(counter_down > electrons_spin_down){
-                continue;
-            }
-            eigenstates[j].occupation = 1.0;
-            for (size_t k = 0; k < basis_size/2; k++){
-                density_down[k] += std::norm(eigenstates[j].eigenvector[k]);
-            }
-        }
-        else{
-            counter_up += 1;
-            if(counter_up > electrons_spin_up){
-                continue;
-            }
-            eigenstates[j].occupation = 1.0;
-            for (size_t k = 0; k < basis_size/2; k++){
-                density_up[k] += std::norm(eigenstates[j].eigenvector[k]);
-            }
-        }
-    }
-
-    std::cout << "Occupations:" << '\n';
-    for (size_t i = 0; i < eigenstates.size(); i++) {
-        std::cout << eigenstates[i].eigenvalue << " " << eigenstates[i].spin_channel
-                  << " " << eigenstates[i].occupation << '\n';
-    }
-    // std::cout << "Current density:" << '\n';
-    // for (size_t i = 0; i < basis_size/2; i++) {
-    //     std::cout << curr_density[i] << '\n';
-    // }
-
-
-	if(!k_multiplicity){
+    if(k_temperature){
         fixDensity(propertyExtractor);
     }
 
     Array<double> old_spin_and_site_resolved_density
-		= spin_and_site_resolved_density;
+        = spin_and_site_resolved_density;
 
-	//Calculate the spin and site resolved density. Note that the k-indices
-	//are summed over using the IDX_SUM_ALL specifier, while the density is
-	//stored separately for each spin and site because of the IDX_ALL
-	//specifier.
-	// Property::Density density = propertyExtractor.calculateDensity({
-	// 	{IDX_ALL, IDX_ALL}
-	// });
+    //Calculate the spin and site resolved density. Note that the k-indices
+    //are summed over using the IDX_SUM_ALL specifier, while the density is
+    //stored separately for each spin and site because of the IDX_ALL
+    //specifier.
+    Property::Density density_temp = propertyExtractor.calculateDensity({
+    	{IDX_ALL, IDX_ALL}
+    });
 
-    // for(unsigned int spin = 0; spin < 2; spin++){
-	// 	for(unsigned int site = 0; site < k_num_atoms; site++){
-    //         std::cout << "Density of spin: " << spin << " and site: " << site << " is: " << density({site, spin}) << '\n';
-    //     }
-    // }
+    if(k_multiplicity){
+        std::vector<Eigenstate> eigenstates;
+        const int basis_size = model.getBasisSize();
 
-    // static int print_count = 0;
-    // if(print_count++ < 3){
-    //     for (size_t spin_ = 0; spin_ < 2; spin_++) {
-    //         double total_spin_density = 0;
-    //         for (size_t site = 0; site < k_num_atoms; site++) {
-    //             total_spin_density += spin_and_site_resolved_density[{spin_, site}];
-    //
-    //         }
-    //         // std::cout << std::boolalpha;
-    //         // std::cout << "Total spin for spin " << spin_ << " is " << total_spin_density << '\n';
-    //     }
-    // }
+        for(int i = 0; i < basis_size; ++i){
+
+            bool state {false};
+            double eval {eigen_values[i]};
+            std::vector<complex<double>> evec;
+
+            complex<double> spin_up {0.0, 0.0};
+            complex<double> spin_down {0.0, 0.0};
+
+            for (size_t j = 0; j < basis_size; j+=2) {
+                spin_down += std::abs(eigen_vectors[i*basis_size + j]);
+            }
+            for (size_t j = 1; j < basis_size; j+=2) {
+                spin_up += std::abs(eigen_vectors[i*basis_size + j]);
+            }
+            bool up_greater_than_down { std::abs(spin_up.real()) > std::abs(spin_down.real()) };
+            //std::cout << "domination spin:" << odd_greater_than_even << '\n';
+            state = up_greater_than_down;
+
+            if(up_greater_than_down){
+                for (size_t j = 1; j < basis_size; j+=2) {
+                    evec.push_back(eigen_vectors[i*basis_size + j]);
+                }
+            }
+            else{
+                for (size_t j = 0; j < basis_size; j+=2) {
+                    evec.push_back(eigen_vectors[i*basis_size + j]);
+                }
+            }
+            eigenstates.push_back({eval, state, 0.0, evec});
+        }
+
+        // std::cout << "eigenstates: " << '\n';
+        // std::cout << eigenstates.size() << '\n';
+        // std::cout << eigenstates[0] << '\n';
+        // std::cout << eigenstates[1] << '\n';
+        // std::cout << eigenstates[2] << '\n';
 
 
-    //Update the spin and site resolved density. Mix with the previous
-    //value to stabilize the self-consistent calculation.
-    for(unsigned int site = 0; site < k_num_atoms; site++){
-        spin_and_site_resolved_density[{0, site}]
-            = k_mixing_parameter*spin_and_site_resolved_density[
-                {0, site}
-            ] + (1 - k_mixing_parameter)*density_down[site]; ///(model.getBasisSize()/k_num_atoms);
+        // Multiplicity m = 2*S + 1
+        // m = 1 --> S = 0
+        // m = 3 --> S = 1
 
+        int atoms_per_spin_channel {basis_size / 4};
+
+        //TODO: fix for even multiplicity (doublet, quartet, ...)
+
+        int electrons_spin_up {atoms_per_spin_channel};
+        int electrons_spin_down {atoms_per_spin_channel};
+
+        int spin_change {(k_multiplicity-1)/2};
+        electrons_spin_up += spin_change;
+        electrons_spin_down -= spin_change;
+
+        static int print_cap{ 0 };
+        if(!print_cap++){
+            std::cout << "\nelectrons spin up: " << electrons_spin_up << '\n';
+            std::cout << "electrons spin down: " << electrons_spin_down << '\n';
+        }
+
+        int counter_up {0};
+        int counter_down {0};
+        std::vector<double> density_up(basis_size/2, 0.0);
+        std::vector<double> density_down(basis_size/2, 0.0);
+
+        for (size_t j = 0; j < basis_size; j++){
+            if(!eigenstates[j].spin_channel){
+                counter_down += 1;
+                if(counter_down > electrons_spin_down){
+                    continue;
+                }
+                eigenstates[j].occupation = 1.0;
+                for (size_t k = 0; k < basis_size/2; k++){
+                    density_down[k] += std::norm(eigenstates[j].eigenvector[k]);
+                }
+            }
+            else{
+                counter_up += 1;
+                if(counter_up > electrons_spin_up){
+                    continue;
+                }
+                eigenstates[j].occupation = 1.0;
+                for (size_t k = 0; k < basis_size/2; k++){
+                    density_up[k] += std::norm(eigenstates[j].eigenvector[k]);
+                }
+            }
+        }
+
+        // std::cout << "Occupations:" << '\n';
+        // for (size_t i = 0; i < eigenstates.size(); i++) {
+        //     std::cout << eigenstates[i].eigenvalue << " " << eigenstates[i].spin_channel
+        //               << " " << eigenstates[i].occupation << '\n';
+        // }
+
+        // std::cout << "Current density:" << '\n';
+        // for (size_t i = 0; i < basis_size/2; i++) {
+        //     std::cout << curr_density[i] << '\n';
+        // }
+
+
+        // for(unsigned int spin = 0; spin < 2; spin++){
+    	// 	for(unsigned int site = 0; site < k_num_atoms; site++){
+        //         std::cout << "Density of spin: " << spin << " and site: " << site << " is: " << density({site, spin}) << '\n';
+        //     }
+        // }
+
+        // static int print_count = 0;
+        // if(print_count++ < 3){
+        //     for (size_t spin_ = 0; spin_ < 2; spin_++) {
+        //         double total_spin_density = 0;
+        //         for (size_t site = 0; site < k_num_atoms; site++) {
+        //             total_spin_density += spin_and_site_resolved_density[{spin_, site}];
+        //
+        //         }
+        //         // std::cout << std::boolalpha;
+        //         // std::cout << "Total spin for spin " << spin_ << " is " << total_spin_density << '\n';
+        //     }
+        // }
+
+
+        //Update the spin and site resolved density. Mix with the previous
+        //value to stabilize the self-consistent calculation.
+        for(unsigned int site = 0; site < k_num_atoms; site++){
+            spin_and_site_resolved_density[{0, site}]
+                = k_mixing_parameter*spin_and_site_resolved_density[
+                    {0, site}
+                ] + (1 - k_mixing_parameter)*density_down[site]; ///(model.getBasisSize()/k_num_atoms);
+
+        }
+        for(unsigned int site = 0; site < k_num_atoms; site++){
+            spin_and_site_resolved_density[{1, site}]
+        		= k_mixing_parameter*spin_and_site_resolved_density[
+        			{1, site}
+        		] + (1 - k_mixing_parameter)*density_up[site];///(model.getBasisSize()/k_num_atoms);
+        }
     }
-    for(unsigned int site = 0; site < k_num_atoms; site++){
-        spin_and_site_resolved_density[{1, site}]
-    		= k_mixing_parameter*spin_and_site_resolved_density[
-    			{1, site}
-    		] + (1 - k_mixing_parameter)*density_up[site];///(model.getBasisSize()/k_num_atoms);
+    else if(k_temperature){
+    	// //Update the spin and site resolved density. Mix with the previous
+    	// //value to stabilize the self-consistent calculation.
+    	for(unsigned int spin = 0; spin < 2; spin++){
+    		for(unsigned int site = 0; site < k_num_atoms; site++){
+                spin_and_site_resolved_density[{spin, site}]
+    				= k_mixing_parameter*spin_and_site_resolved_density[
+    					{spin, site}
+    				] + (1 - k_mixing_parameter)*density_temp({
+    					static_cast<int>(site),
+                        static_cast<int>(spin)
+    				});///(model.getBasisSize()/k_num_atoms);
 
+    		}
+    	}
     }
-
-
-    //
-	// //Update the spin and site resolved density. Mix with the previous
-	// //value to stabilize the self-consistent calculation.
-	// for(unsigned int spin = 0; spin < 2; spin++){
-	// 	for(unsigned int site = 0; site < k_num_atoms; site++){
-    //         spin_and_site_resolved_density[{spin, site}]
-	// 			= k_mixing_parameter*spin_and_site_resolved_density[
-	// 				{spin, site}
-	// 			] + (1 - k_mixing_parameter)*density({
-	// 				static_cast<int>(site),
-    //                 static_cast<int>(spin)
-	// 			});///(model.getBasisSize()/k_num_atoms);
-    //
-	// 	}
-	// }
 
 	//Calculate the maximum difference between the new and old spin and
 	//site resolved density.
