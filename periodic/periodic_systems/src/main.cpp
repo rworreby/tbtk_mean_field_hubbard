@@ -42,6 +42,7 @@ using std::ofstream;
 const double k_eps { 0.0001 };
 const double atomic_radii_C { 0.68 };
 const double threshold { 1e-4 };
+const int k_size_brillouin_zone{ 100 };
 size_t k_num_atoms { 0 };
 size_t k_num_atoms_unit_cell { 0 };
 std::complex<double> i(0, 1);
@@ -52,6 +53,10 @@ double DENSITY_TOLLERANCE { 1e-7 };
 double TARGET_DENSITY_PER_SITE { 1.0 };
 double MIXING_PARAMETER { 0.5 };
 Model model;
+
+static int print_helper_01{ 0 };
+static int print_helper_02{ 0 };
+
 
 #define PRINTVAR(x) std::cout << #x << " = " << (x) << std::endl;
 void print_help(bool full);
@@ -342,11 +347,13 @@ void initSpinAndSiteResolvedDensity(Array<double>& spinAndSiteResolvedDensity){
 //site. Compare to the model specification where H_C only is passed to the
 //model with both the 'to' and 'from' indices equal.
 complex<double> H_U(const Index &toIndex, const Index &fromIndex){
-	unsigned int spin = fromIndex[1];
-	int site = fromIndex[0];
+	unsigned int spin = fromIndex[3];
+	int site = fromIndex[4];
 
-    // PRINTVAR((spin + 1)%2);
-    // PRINTVAR(site);
+    std::cout << "Printing in H_U: " << '\n';
+    PRINTVAR((spin + 1)%2);
+    PRINTVAR(site);
+    //PRINTVAR(spinAndSiteResolvedDensity[{(spin + 1)%2, site}]);
 
 	return U*spinAndSiteResolvedDensity[{(spin + 1)%2, site}];
 }
@@ -378,22 +385,58 @@ void fixDensity(PropertyExtractor::BlockDiagonalizer &propertyExtractor){
 	//stepLength.
 	int stepDirection = 0;
 	bool hasOvershot = false;
+
+    const int number_of_sites = model.getBasisSize()/(2 * k_size_brillouin_zone);
+    std::cout << "number of sites: " << number_of_sites << '\n';
 	while(true){
 		//Calculate the density per unit cell.
-		double densityPerUnitCell = 0;
-		for(size_t n = 0; n < model.getBasisSize(); n++){
-			densityPerUnitCell
-				+= Functions::fermiDiracDistribution(
-					eigenValues(n),
-					model.getChemicalPotential(),
-					model.getTemperature()
-				)/(model.getBasisSize()/4);
+		double total_num_el = 0;
+		for(int i_spin = 0; i_spin < 2; i_spin++){
+    		for(int i_state = 0; i_state < number_of_sites; i_state++){
+                for(int i_k = 0; i_k < k_size_brillouin_zone; i_k++){
+                    // We are looping through both spin channels
+                    // and we add the occupation of each orbital
+                    // giving us the total number of electron
+
+
+                    total_num_el
+                    		+= Functions::fermiDiracDistribution(
+                    			propertyExtractor.getEigenValue({i_k, 0, 0, i_spin}, i_state),
+                    			model.getChemicalPotential(),
+                    			model.getTemperature()
+                    		);
+                    double occ = Functions::fermiDiracDistribution(
+                        propertyExtractor.getEigenValue({i_k, 0, 0, i_spin}, i_state),
+                        model.getChemicalPotential(),
+                        model.getTemperature()
+                    );
+
+                    if(print_helper_01++ < 25){
+                        PRINTVAR(i_spin);
+                        PRINTVAR(i_k);
+                        PRINTVAR(i_state);
+                        PRINTVAR(propertyExtractor.getEigenValue({i_k, 0, 0, i_spin}, i_state));
+                        PRINTVAR(occ);
+                    }
+                    // std::cout << i_spin << " " << i_k << " " << i_state << " "
+                    //     << eigenValues({i_k, 0, 0, i_spin}, i_state) << " "
+                    //     << std::endl;
+
+                }
+            }
 		}
 
+        double el_per_site_per_k_point = total_num_el / (number_of_sites * k_size_brillouin_zone);
+
+        // if(print_helper_02++ < 5){
+        //std::cout << "El per site " << el_per_site_per_k_point << std::endl;
+        //std::cout << "Chem pot " << model.getChemicalPotential() << std::endl;
+        // }
+
 		//Exit the loop if the target density is met within the given
-		//tollerance.
+		//tolerance.
 		if(
-			abs(densityPerUnitCell - 2*TARGET_DENSITY_PER_SITE)
+			abs(el_per_site_per_k_point - TARGET_DENSITY_PER_SITE)
 			< DENSITY_TOLLERANCE
 		){
             //std::cout << "Density per site: " << densityPerUnitCell << '\n';
@@ -403,7 +446,7 @@ void fixDensity(PropertyExtractor::BlockDiagonalizer &propertyExtractor){
 
 		//Determine whether an overshot has occured and step the chemical
 		//potential.
-		if(densityPerUnitCell < 2*TARGET_DENSITY_PER_SITE){
+		if(el_per_site_per_k_point < TARGET_DENSITY_PER_SITE){
 			if(stepDirection == -1)
 				hasOvershot = true;
 
@@ -418,6 +461,7 @@ void fixDensity(PropertyExtractor::BlockDiagonalizer &propertyExtractor){
 		model.setChemicalPotential(
 			model.getChemicalPotential() + stepDirection*stepLength
 		);
+
 
 		//Scale the stepLength depending on whether the overshot has
 		//occurred or not.
@@ -438,8 +482,8 @@ void fixDensity(PropertyExtractor::BlockDiagonalizer &propertyExtractor){
 bool selfConsistencyCallbackPeriodic(Solver::BlockDiagonalizer &solver){
 	PropertyExtractor::BlockDiagonalizer propertyExtractor(solver);
 
-
-    for (int k = 15; k < 20; k++) {
+    std::cout << "Printing Initial Eigenvalues in selfConsistencyCallbackPeriodic:" << '\n';
+    for (int k = 0; k < k_size_brillouin_zone; k++) {
         std::cout << "Eigenvalues for k = " << k << '\n';
         for (int spin = 0; spin < 2; spin++) {
 
@@ -490,7 +534,7 @@ bool selfConsistencyCallbackPeriodic(Solver::BlockDiagonalizer &solver){
 		}
 	}
 
-
+    std::cout << "Printing Eigenvalues in selfConsistencyCallbackPeriodic:" << '\n';
     for (int k = 15; k < 20; k++) {
         std::cout << "Eigenvalues for k = " << k << '\n';
         for (int spin = 0; spin < 2; spin++) {
@@ -618,8 +662,7 @@ int main(int argc, char **argv) {
     //Set the natural units for this calculation.
 	UnitHandler::setScales({"1 C", "1 pcs", "1 eV", "1 Ao", "1 K", "1 s"});
 
-    const size_t k_brillouin_zone_res = 20;
-	const int k_points_per_path = k_brillouin_zone_res; // / 5;
+	const int k_points_per_path = k_size_brillouin_zone; // / 5;
 	vector<unsigned int> numMeshPoints = {
 		k_points_per_path,
         1,
@@ -925,6 +968,7 @@ int main(int argc, char **argv) {
 
 	PropertyExtractor::BlockDiagonalizer propertyExtractor(solver);
 
+    std::cout << "Printing Eigenvalues in Main Function 1:" << '\n';
     for (int k = 15; k < 20; k++) {
         std::cout << "Eigenvalues for k = " << k << '\n';
         for (int spin = 0; spin < 2; spin++) {
@@ -960,9 +1004,10 @@ int main(int argc, char **argv) {
     ofstream myfile;
 	myfile.open("results.txt");
 	std::cout << "Writing results to file" << '\n';
-    for (size_t i = 0; i < atoms_in_unit_cell.size(); i++) {
+    //for (size_t i = 0; i < atoms_in_unit_cell.size(); i++) {
+    for (size_t i = 0; i < 8; i++) {
         myfile << "value" << i;
-        if(i != atoms_in_unit_cell.size()-1){
+        if(i != 7){
             myfile << ", ";
         }
         else{
@@ -976,7 +1021,7 @@ int main(int argc, char **argv) {
 
         std::cout << "startPoint: " << startPoint << '\n';
         std::cout << "endPoint: " << endPoint << '\n';
-		for(unsigned int n = 0; n < k_points_per_path; n++){
+		for(int n = 0; n < k_points_per_path; n++){
 			Vector3d k = (
 				interpolator[n]*endPoint
 				+ (1 - interpolator[n])*startPoint
@@ -987,21 +1032,41 @@ int main(int argc, char **argv) {
                 numMeshPoints
 			);
 
-            // std::cout << propertyExtractor.getEigenValue({5,0,0,1}, 1) << '\n';
-            // std::cout << propertyExtractor.getEigenValue({5,0,0,0}, 1) << '\n';
-            for (int k = 15; k < 20; k++) {
-                std::cout << "Eigenvalues for k = " << k << '\n';
-                for (int spin = 0; spin < 2; spin++) {
-
-                    //for(size_t i = 0; i < 2; ++i){
-                        std::cout << propertyExtractor.getEigenValue({k, 0, 0, spin}, 1) << "\n";
-                    //}
-                }
+            //std::cout << "Printing eigenvalues: " << '\n';
+            std::cout << "Eigenvalues for k = " << kIndex[0] << '\n';
+            PRINTVAR(kIndex[0]);
+            PRINTVAR(kIndex[1]);
+            PRINTVAR(kIndex[2]);
+            PRINTVAR(n);
+            PRINTVAR(k);
+            for (int spin = 0; spin < 2; spin++) {
+                std::cout << propertyExtractor.getEigenValue({kIndex[0], 0, 0, spin}, 0) << "\n";
             }
 
-            for(size_t i = 0; i < atoms_in_unit_cell.size(); ++i){
-                myfile << propertyExtractor.getEigenValue({kIndex[0], kIndex[1], kIndex[2], 0}, new_atoms_in_unit_cell[i]);
-                if(i != atoms_in_unit_cell.size()-1)
+
+            // std::cout << propertyExtractor.getEigenValue({5,0,0,1}, 1) << '\n';
+            // std::cout << propertyExtractor.getEigenValue({5,0,0,0}, 1) << '\n';
+            // std::cout << "Printing Eigenvalues in Main Function 2:" << '\n';
+            // for (int k = 15; k < 20; k++) {
+            //     std::cout << "Eigenvalues for k = " << k << '\n';
+            //     for (int spin = 0; spin < 2; spin++) {
+            //
+            //         //for(size_t i = 0; i < 2; ++i){
+            //             std::cout << propertyExtractor.getEigenValue({k, 0, 0, spin}, 0) << "\n";
+            //         //}
+            //     }
+            // }
+
+            // std::cout << "New atoms in unit cell:" << '\n';
+            // for(size_t i = 0; i < new_atoms_in_unit_cell.size(); ++i){
+            //     std::cout << new_atoms_in_unit_cell[i] << " ";
+            // }
+
+
+            std::cout << '\n';
+            for(size_t i = 0; i < 8; ++i){
+                myfile << propertyExtractor.getEigenValue({kIndex[0], kIndex[1], kIndex[2], 0}, new_atoms_in_unit_cell[i]); //Old: new_atoms_in_unit_cell[i]
+                if(i != 7)
                     myfile << ", ";
                 else{
                     myfile << std::endl;
