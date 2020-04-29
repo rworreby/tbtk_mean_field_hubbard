@@ -882,18 +882,23 @@ int main(int argc, char *argv[]){
                 string ig = argv[++i];
                 if(ig == "zero"){
                     k_initial_guess = 0;
+                    std::cout << "Initial guess: Zero" << '\n';
                 }
                 else if(ig == "one"){
                     k_initial_guess = 1;
+                    std::cout << "Initial guess: One" << '\n';
                 }
                 else if(ig == "random"){
                     k_initial_guess = 1010;
+                    std::cout << "Initial guess: Random" << '\n';
                 }
                 else if(ig == "zeroone"){
                     k_initial_guess = 10;
+                    std::cout << "Initial guess: Zero one spin channel, one one the others" << '\n';
                 }
                 else{
                     k_initial_guess = 1010;
+                    std::cout << "Initial guess: Random" << '\n';
                 }
             }
             if(!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")){
@@ -956,7 +961,7 @@ int main(int argc, char *argv[]){
 	//number of iterations is reached.
 	solver.run();
 
-    if(hubbard) std::cout << "Final chemical potential: " << model.getChemicalPotential() << '\n';
+    if(hubbard && k_temperature) std::cout << "Final chemical potential: " << model.getChemicalPotential() << '\n';
 	//Create PropertyExtractor
 	PropertyExtractor::Diagonalizer pe(solver);
 
