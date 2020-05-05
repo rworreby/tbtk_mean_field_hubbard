@@ -372,6 +372,7 @@ void fixDensity(PropertyExtractor::BlockDiagonalizer &propertyExtractor){
 	//Get the eigenvalues.
 	Property::EigenValues eigenValues = propertyExtractor.getEigenValues();
 
+    std::cout << "----------- Reached position 1 -----------" << '\n';
 	//Perform binary search. The flags stepDirection and hasOvershot
 	//indicates in which direction the previous step was taken and whether
 	//the calculation has yet overshot. The initial step can be taken in
@@ -411,13 +412,13 @@ void fixDensity(PropertyExtractor::BlockDiagonalizer &propertyExtractor){
                         model.getTemperature()
                     );
 
-                    if(print_helper_01++ < 25){
-                        PRINTVAR(i_spin);
-                        PRINTVAR(i_k);
-                        PRINTVAR(i_state);
-                        PRINTVAR(propertyExtractor.getEigenValue({i_k, 0, 0, i_spin}, i_state));
-                        PRINTVAR(occ);
-                    }
+                    // if(print_helper_01++ < 25){
+                    //     PRINTVAR(i_spin);
+                    //     PRINTVAR(i_k);
+                    //     PRINTVAR(i_state);
+                    //     PRINTVAR(propertyExtractor.getEigenValue({i_k, 0, 0, i_spin}, i_state));
+                    //     PRINTVAR(occ);
+                    // }
                     // std::cout << i_spin << " " << i_k << " " << i_state << " "
                     //     << eigenValues({i_k, 0, 0, i_spin}, i_state) << " "
                     //     << std::endl;
@@ -426,15 +427,21 @@ void fixDensity(PropertyExtractor::BlockDiagonalizer &propertyExtractor){
             }
 		}
 
+
         double el_per_site_per_k_point = total_num_el / (number_of_sites * k_size_brillouin_zone);
 
         // if(print_helper_02++ < 5){
-        //std::cout << "El per site " << el_per_site_per_k_point << std::endl;
-        //std::cout << "Chem pot " << model.getChemicalPotential() << std::endl;
+        std::cout << "El per site " << el_per_site_per_k_point << std::endl;
+        std::cout << "Chem pot " << model.getChemicalPotential() << std::endl;
         // }
 
 		//Exit the loop if the target density is met within the given
 		//tolerance.
+        PRINTVAR(el_per_site_per_k_point);
+        PRINTVAR(TARGET_DENSITY_PER_SITE);
+        PRINTVAR(abs(el_per_site_per_k_point - TARGET_DENSITY_PER_SITE));
+        PRINTVAR(DENSITY_TOLLERANCE);
+
 		if(
 			abs(el_per_site_per_k_point - TARGET_DENSITY_PER_SITE)
 			< DENSITY_TOLLERANCE
@@ -443,6 +450,7 @@ void fixDensity(PropertyExtractor::BlockDiagonalizer &propertyExtractor){
             //std::cout << "Final chemical potetntial: " << model.getChemicalPotential() << '\n';
 			break;
 		}
+
 
 		//Determine whether an overshot has occured and step the chemical
 		//potential.
@@ -1003,11 +1011,12 @@ int main(int argc, char **argv) {
 
     ofstream myfile;
 	myfile.open("results.txt");
+    PRINTVAR(new_atoms_in_unit_cell.size());
 	std::cout << "Writing results to file" << '\n';
     //for (size_t i = 0; i < atoms_in_unit_cell.size(); i++) {
-    for (size_t i = 0; i < 8; i++) {
+    for (size_t i = 0; i < new_atoms_in_unit_cell.size(); i++) {
         myfile << "value" << i;
-        if(i != 7){
+        if(i != new_atoms_in_unit_cell.size()-1){
             myfile << ", ";
         }
         else{
@@ -1033,15 +1042,15 @@ int main(int argc, char **argv) {
 			);
 
             //std::cout << "Printing eigenvalues: " << '\n';
-            std::cout << "Eigenvalues for k = " << kIndex[0] << '\n';
-            PRINTVAR(kIndex[0]);
-            PRINTVAR(kIndex[1]);
-            PRINTVAR(kIndex[2]);
-            PRINTVAR(n);
-            PRINTVAR(k);
-            for (int spin = 0; spin < 2; spin++) {
-                std::cout << propertyExtractor.getEigenValue({kIndex[0], 0, 0, spin}, 0) << "\n";
-            }
+            // std::cout << "Eigenvalues for k = " << kIndex[0] << '\n';
+            // PRINTVAR(kIndex[0]);
+            // PRINTVAR(kIndex[1]);
+            // PRINTVAR(kIndex[2]);
+            // PRINTVAR(n);
+            // PRINTVAR(k);
+            // for (int spin = 0; spin < 2; spin++) {
+            //     std::cout << propertyExtractor.getEigenValue({kIndex[0], 0, 0, spin}, 0) << "\n";
+            // }
 
 
             // std::cout << propertyExtractor.getEigenValue({5,0,0,1}, 1) << '\n';
@@ -1063,10 +1072,9 @@ int main(int argc, char **argv) {
             // }
 
 
-            std::cout << '\n';
-            for(size_t i = 0; i < 8; ++i){
+            for(size_t i = 0; i < new_atoms_in_unit_cell.size(); ++i){
                 myfile << propertyExtractor.getEigenValue({kIndex[0], kIndex[1], kIndex[2], 0}, new_atoms_in_unit_cell[i]); //Old: new_atoms_in_unit_cell[i]
-                if(i != 7)
+                if(i != new_atoms_in_unit_cell.size()-1)
                     myfile << ", ";
                 else{
                     myfile << std::endl;
