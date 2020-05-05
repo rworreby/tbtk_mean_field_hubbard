@@ -43,7 +43,6 @@ const double k_eps { 0.0001 };
 const double atomic_radii_C { 0.68 };
 const double threshold { 1e-4 };
 const int k_size_brillouin_zone{ 100 };
-size_t k_num_atoms { 0 };
 size_t k_num_atoms_unit_cell { 0 };
 std::complex<double> i(0, 1);
 Array<double> spinAndSiteResolvedDensity;
@@ -333,7 +332,7 @@ std::ostream& operator<<(std::ostream& os, h_state_enum c)
 void initSpinAndSiteResolvedDensity(Array<double>& spinAndSiteResolvedDensity){
 	srand(time(nullptr));
 	for(unsigned int spin = 0; spin < 2; spin++){
-		for(unsigned int site = 0; site < k_num_atoms; site++){
+		for(unsigned int site = 0; site < k_num_atoms_unit_cell; site++){
 			spinAndSiteResolvedDensity[
 				{spin, site}
 			] = (rand()%100)/100.0; //1.0;
@@ -350,9 +349,9 @@ complex<double> H_U(const Index &toIndex, const Index &fromIndex){
 	unsigned int spin = fromIndex[3];
 	int site = fromIndex[4];
 
-    std::cout << "Printing in H_U: " << '\n';
-    PRINTVAR((spin + 1)%2);
-    PRINTVAR(site);
+    // std::cout << "Printing in H_U: " << '\n';
+    // PRINTVAR((spin + 1)%2);
+    // PRINTVAR(site);
     //PRINTVAR(spinAndSiteResolvedDensity[{(spin + 1)%2, site}]);
 
 	return U*spinAndSiteResolvedDensity[{(spin + 1)%2, site}];
@@ -490,16 +489,16 @@ void fixDensity(PropertyExtractor::BlockDiagonalizer &propertyExtractor){
 bool selfConsistencyCallbackPeriodic(Solver::BlockDiagonalizer &solver){
 	PropertyExtractor::BlockDiagonalizer propertyExtractor(solver);
 
-    std::cout << "Printing Initial Eigenvalues in selfConsistencyCallbackPeriodic:" << '\n';
-    for (int k = 0; k < k_size_brillouin_zone; k++) {
-        std::cout << "Eigenvalues for k = " << k << '\n';
-        for (int spin = 0; spin < 2; spin++) {
-
-            //for(size_t i = 0; i < 2; ++i){
-                std::cout << propertyExtractor.getEigenValue({k, 0, 0, spin}, 0) << "\n";
-            //}
-        }
-    }
+    // std::cout << "Printing initial Eigenvalues in selfConsistencyCallbackPeriodic:" << '\n';
+    // for (int k = 0; k < k_size_brillouin_zone; k++) {
+    //     std::cout << "Eigenvalues for k = " << k << '\n';
+    //     for (int spin = 0; spin < 2; spin++) {
+    //
+    //         //for(size_t i = 0; i < 2; ++i){
+    //             std::cout << propertyExtractor.getEigenValue({k, 0, 0, spin}, 0) << "\n";
+    //         //}
+    //     }
+    // }
 
 	//Fix the density.
 	fixDensity(propertyExtractor);
@@ -517,10 +516,12 @@ bool selfConsistencyCallbackPeriodic(Solver::BlockDiagonalizer &solver){
 	    {IDX_SUM_ALL, IDX_SUM_ALL, IDX_SUM_ALL, IDX_ALL, IDX_ALL}
     });
 
+    const int number_of_sites = model.getBasisSize()/(2 * k_size_brillouin_zone);
+    PRINTVAR(number_of_sites);
 
 	//Update the spin and site resolved density. Mix with the previous
 	//value to stabilize the self-consistent calculation.
-    for(unsigned int spin = 0; spin < 2; spin++){
+    for(int spin = 0; spin < 2; spin++){
 		for(int site = 0; site < k_num_atoms_unit_cell; site++){
 			spinAndSiteResolvedDensity[{spin, site}]
 				= MIXING_PARAMETER*spinAndSiteResolvedDensity[
@@ -531,34 +532,29 @@ bool selfConsistencyCallbackPeriodic(Solver::BlockDiagonalizer &solver){
                     IDX_SUM_ALL,
 					(int)spin,
                     (int)site
-				}); ///(model.getBasisSize()/k_num_atoms);
-            PRINTVAR(density({
-                IDX_SUM_ALL,
-                IDX_SUM_ALL,
-                IDX_SUM_ALL,
-                (int)spin,
-                (int)site
-            }));
+				}) / k_size_brillouin_zone; ///(model.getBasisSize()/k_num_atoms_unit_cell);
+
+            PRINTVAR((spinAndSiteResolvedDensity[spin, site]));
 		}
 	}
 
-    std::cout << "Printing Eigenvalues in selfConsistencyCallbackPeriodic:" << '\n';
-    for (int k = 15; k < 20; k++) {
-        std::cout << "Eigenvalues for k = " << k << '\n';
-        for (int spin = 0; spin < 2; spin++) {
-
-            //for(size_t i = 0; i < 2; ++i){
-                std::cout << propertyExtractor.getEigenValue({k, 0, 0, spin}, 0) << "\n";
-            //}
-        }
-    }
+    // std::cout << "Printing Eigenvalues in selfConsistencyCallbackPeriodic:" << '\n';
+    // for (int k = 15; k < 20; k++) {
+    //     std::cout << "Eigenvalues for k = " << k << '\n';
+    //     for (int spin = 0; spin < 2; spin++) {
+    //
+    //         //for(size_t i = 0; i < 2; ++i){
+    //             std::cout << propertyExtractor.getEigenValue({k, 0, 0, spin}, 0) << "\n";
+    //         //}
+    //     }
+    // }
 
 	//Calculate the maximum difference between the new and old spin and
 	//site resolved density.
     int max_spin {0}, max_site{0};
 	double maxDifference = 0;
 	for(unsigned int spin = 0; spin < 2; spin++){
-		for(int site = 0; site < k_num_atoms; site++){
+		for(int site = 0; site < k_num_atoms_unit_cell; site++){
 			double difference = abs(
 				spinAndSiteResolvedDensity[{spin, site}]
 				- oldSpinAndSiteResolvedDensity[{spin, site}]
@@ -649,6 +645,7 @@ int main(int argc, char **argv) {
             }
             if(!strcmp(argv[i], "-H") || !strcmp(argv[i], "--Hubbard")){
                 hubbard = std::stod(argv[++i]);
+                U = hubbard;
             }
             if(!strcmp(argv[i], "-T") || !strcmp(argv[i], "--temperature")){
                 temperature = std::stod(argv[++i]);
@@ -976,16 +973,16 @@ int main(int argc, char **argv) {
 
 	PropertyExtractor::BlockDiagonalizer propertyExtractor(solver);
 
-    std::cout << "Printing Eigenvalues in Main Function 1:" << '\n';
-    for (int k = 15; k < 20; k++) {
-        std::cout << "Eigenvalues for k = " << k << '\n';
-        for (int spin = 0; spin < 2; spin++) {
-
-            //for(size_t i = 0; i < 2; ++i){
-                std::cout << propertyExtractor.getEigenValue({k, 0, 0, spin}, 0) << "\n";
-            //}
-        }
-    }
+    // std::cout << "Printing Eigenvalues in Main Function 1:" << '\n';
+    // for (int k = 15; k < 20; k++) {
+    //     std::cout << "Eigenvalues for k = " << k << '\n';
+    //     for (int spin = 0; spin < 2; spin++) {
+    //
+    //         //for(size_t i = 0; i < 2; ++i){
+    //             std::cout << propertyExtractor.getEigenValue({k, 0, 0, spin}, 0) << "\n";
+    //         //}
+    //     }
+    // }
 
 	Property::DOS dos = propertyExtractor.calculateDOS();
 
