@@ -31,10 +31,8 @@ c++ molecule_meanfield_hubbard.cpp -o main && ./main clars_goblet.xyz -t 1.8 -b 
 #include "TBTK/ParameterSet.h"
 #include "TBTK/Property/DOS.h"
 #include "TBTK/Property/EigenValues.h"
-#include "TBTK/PropertyExtractor/BlockDiagonalizer.h"
 #include "TBTK/PropertyExtractor/Diagonalizer.h"
 #include "TBTK/Range.h"
-#include "TBTK/Solver/BlockDiagonalizer.h"
 #include "TBTK/Solver/Diagonalizer.h"
 #include "TBTK/Vector2d.h"
 
