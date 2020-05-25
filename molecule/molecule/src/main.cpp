@@ -178,20 +178,6 @@ public:
         }
     }
 
-    // double find_unit_cell_size(){
-    //     double max_val=0, min_val=0;
-    //
-    //     comperator_t compFunctor = [](double elem1, double elem2){
-	// 			return elem1 < elem2;
-	// 	};
-    //     std::sort(val_y.begin(), val_y.end(), compFunctor);
-    //
-    //     min_val = val_y[0];
-    //     max_val = val_y[val_y.size()-1];
-    //
-    //     return max_val - min_val;
-    // }
-
     size_t size(){
         return atoms_.size();
     }
@@ -243,11 +229,7 @@ public:
                 double y_diff = y_1 > y_2 ? y_1 - y_2 : y_2 - y_1;
                 double z_diff = z_1 > z_2 ? z_1 - z_2 : z_2 - z_1;
                 double result = std::sqrt(x_diff * x_diff + y_diff * y_diff + z_diff * z_diff);
-                //static int counter_same_dist = 0;
 
-                //if two atoms are inside the sum of their atomic radii
-                //(plus a threshold that is provided by the user, default 1.3)
-                //there is a bond between them
                 if(result < bond_threshold_){
                     bonds_.push_back(std::make_pair(i, j));
                 }
@@ -280,7 +262,6 @@ public:
 
     bonds_t bonds_;
 private:
-    //adjacency list for all bonds
     double bond_threshold_;
     friend class Molecule;
 
@@ -376,13 +357,9 @@ public:
             end_of_cplx = eigenvector_.find(')', end_of_cplx+1);
 
             number_1 = eigenvector_.substr(start_of_num+1, end_of_num-start_of_num-1);
-            //std::cout << "number_1: " << number_1 << '\n';
             number_2 = eigenvector_.substr(end_of_num+1, end_of_cplx-end_of_num-1);
-            //std::cout << "number_2: " << number_2 << '\n';
 
             complex<double> second_num {std::stod(number_1), std::stod(number_2)};
-
-            //std::cout << "The first two numbers: " << first_num << " " << second_num << '\n';
 
             bool spin_is_up = true;
             complex<double> zero {0.0,0.0};
@@ -394,7 +371,6 @@ public:
             complex<double> sum_odd { std::abs(temp_2) };
             ss_t temp_end_of_cplx { end_of_cplx };
 
-            //std::cout << "eigenvector_: " << eigenvector_ << '\n';
             while (start_of_num != string::npos) {
                 start_of_num = eigenvector_.find('(', end_of_cplx+1);
                 end_of_num = eigenvector_.find(',', end_of_cplx+1);
@@ -419,8 +395,6 @@ public:
 
             }
 
-            //std::cout << "Sum even: " << sum_even << '\n';
-            //std::cout << "Sum odd: " << sum_odd << '\n';
             start_of_num = eigenvector_.find('(', 4);
             end_of_num = eigenvector_.find(',', start_of_num);
             end_of_cplx = eigenvector_.find(')', end_of_num);
@@ -504,8 +478,7 @@ double get_initial_guess(bool spin){
 
 /** Start self consistet mean-field Hubbard **/
 
-//Initialize the spin and site resolved density with random numbers between 0
-//and 1.
+
 void init_spin_and_site_resolved_density(Array<double>& spin_and_site_resolved_density){
 	srand(time(nullptr));
 	for(unsigned int spin = 0; spin < 2; spin++){
@@ -577,19 +550,13 @@ void fixDensity(PropertyExtractor::Diagonalizer &propertyExtractor){
 				)/(model.getBasisSize()/4);
 		}
 
-		//Exit the loop if the target density is met within the given
-		//tolerance.
 		if(
 			abs(density_per_unit_cell - 2*k_target_density_per_site)
 			< k_density_tolerance
 		){
-            //std::cout << "Density per site: " << density_per_unit_cell << '\n';
-            //std::cout << "Final chemical potetntial: " << model.getChemicalPotential() << '\n';
 			break;
 		}
 
-		//Determine whether an overshot has occured and step the chemical
-		//potential.
 		if(density_per_unit_cell < 2*k_target_density_per_site){
 			if(step_direction == -1){
 				has_overshot = true;
@@ -661,7 +628,7 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
                 spin_up += std::abs(eigen_vectors[i*basis_size + j]);
             }
             bool up_greater_than_down { std::abs(spin_up.real()) > std::abs(spin_down.real()) };
-            //std::cout << "domination spin:" << odd_greater_than_even << '\n';
+
             state = up_greater_than_down;
 
             if(up_greater_than_down){
@@ -677,16 +644,6 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
             eigenstates.push_back({eval, state, 0.0, evec});
         }
 
-        // std::cout << "eigenstates: " << '\n';
-        // std::cout << eigenstates.size() << '\n';
-        // std::cout << eigenstates[0] << '\n';
-        // std::cout << eigenstates[1] << '\n';
-        // std::cout << eigenstates[2] << '\n';
-
-
-        // Multiplicity m = 2*S + 1
-        // m = 1 --> S = 0
-        // m = 3 --> S = 1
 
         int atoms_per_spin_channel {basis_size / 4};
 
@@ -800,23 +757,24 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 
 	//Calculate the maximum difference between the new and old spin and
 	//site resolved density.
-    unsigned int max_spin {0}, max_site{0};
-	double max_difference = 0;
+	double max_difference{ 0 };
+    double diff_total{ 0 };
 	for(unsigned int spin = 0; spin < 2; spin++){
 		for(unsigned int site = 0; site < k_num_atoms; site++){
 			double difference = abs(
 				spin_and_site_resolved_density[{spin, site}]
 				- old_spin_and_site_resolved_density[{spin, site}]
 			);
+            diff_total += difference;
+
 			if(difference > max_difference){
 				max_difference = difference;
-                max_spin = spin; max_site = site;
             }
 		}
 	}
 
     scf_convergence << run << "," << iteration_counter++ << ",";
-    scf_convergence << std::abs(max_difference - spin_and_site_resolved_density_tol) << std::endl;
+    scf_convergence << diff_total << std::endl;
     // std::cout << "Conv. difference:"
     //             << std::abs(max_difference - spin_and_site_resolved_density_tol)
     //             << "\tabs. value: "
@@ -840,7 +798,7 @@ int main(int argc, char *argv[]){
     int multiplicity { 0 };
 
     scf_convergence.open("scf_convergence.txt");
-    //scf_convergence << "run,iteration,error" << std::endl;
+    scf_convergence << "run,iteration,error" << std::endl;
 
     if(argc == 1){
         std::cout << "You need to provide at least a file." << '\n';
