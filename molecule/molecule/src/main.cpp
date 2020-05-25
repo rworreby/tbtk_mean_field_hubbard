@@ -66,9 +66,10 @@ size_t k_num_atoms{ 0 };
 
 
 ofstream scf_convergence;
-int iteration_counter = 0;
-int run = 9;
+int iteration_counter{ 0 };
+int run{ 0 };
 
+int verbosity{ 1 };
 
 //USAGE:     DEBUG(debug_var++);
 unsigned int debug_var = 0;
@@ -857,6 +858,12 @@ int main(int argc, char *argv[]){
                     std::cout << "Initial guess: Random" << '\n';
                 }
             }
+            if(!strcmp(argv[i], "-v") || !strcmp(argv[i], "--verbose")){
+                verbosity = 2;
+            }
+            if(!strcmp(argv[i], "-q") || !strcmp(argv[i], "--quiet")){
+                verbosity = 0;
+            }
             if(!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")){
                 print_help(true); exit(0);
             }
@@ -981,5 +988,11 @@ void print_help(bool full){
             \t\t\t  i.e. the solution that is to be found. \n\
             \t\t\t  Default is no specific solution desired. \n\
             \t\t\t  This is mutually exclusive with the -T (temperature) parameter. \n");
+    printf("  -ig or --initial_guess \t- lets you set the inital spin and site resolved density.\n\
+            \t\t\t  possibilities are: zero, one, zeroone, random. \n\
+            \t\t\t  Where 'zeroone' mean 1 on one spin channel and 0 on the other.\n\
+            \t\t\t  Default is random.\n");
+    printf("  -v or --verbose \t\t- prints additional information.\n");
+    printf("  -q or --quiet \t\t- prints only the bare minimum.\n");
     printf("  -h or --help \t\t\t- prints this help info.\n");
 }
