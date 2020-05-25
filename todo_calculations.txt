@@ -1,0 +1,39 @@
+7AGNR:
+ - Scaling of 7AGNR wrt U and length of GNR.
+    -> What Parameters for calculation?
+        - Enforce singlet or triplet solution?
+        - Initialization random / zeroone / ... ?
+
+        == Study singlet/triplet difference.
+           y-axis: singlet-triplet diff, x-axis: length
+         == Error in plotting script -> fix and send pics to K
+
+    == Plot the total absolute magnetization (abs sum of spin-density) vs varying U
+        - Vary length of ANGR
+
+periodic 8ZGNR:
+  - scaling of magnetization of 8ZGNR vs 8ZGNR with "blob"
+    == Paper stability of edge magnetization
+    == Both spin channels get different solution -> Two different plots (or two different colors)
+
+Stone-Wales:
+ - Stone-Wales for periodic GNR
+    -> Location of defect?
+ - Stone-Wales (5/7) for finite GNF
+    -> Location of defect?
+        == Center
+
+Finite Open Shell Systems:
+ -
+
+
+GNF Scaling Mem vs Size:
+ == Full memory usage
+
+
+General:
+ - Axis and plotting style of periodic systems?
+    == Two unit cells (mark one unit cell with rectangle)
+
+ - Include reference pictures from books / papers? E.g. Yazyev
+    == Don't include
