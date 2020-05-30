@@ -804,6 +804,7 @@ int main(int argc, char *argv[]){
     double threshold { 1.7 };
     bool hubbard { false };
     int multiplicity { 0 };
+    string ig{ "" };
 
     scf_convergence.open("scf_convergence.txt");
     scf_convergence << "run,iteration,error" << std::endl;
@@ -843,26 +844,21 @@ int main(int argc, char *argv[]){
                 k_temperature = 0;
             }
             if(!strcmp(argv[i], "-ig") || !strcmp(argv[i], "--initial_guess")){
-                string ig = argv[++i];
+                ig = argv[++i];
                 if(ig == "zero"){
                     k_initial_guess = 0;
-                    std::cout << "Initial guess: Zero" << '\n';
                 }
                 else if(ig == "one"){
                     k_initial_guess = 1;
-                    std::cout << "Initial guess: One" << '\n';
                 }
                 else if(ig == "random"){
                     k_initial_guess = 1010;
-                    std::cout << "Initial guess: Random" << '\n';
                 }
                 else if(ig == "zeroone"){
                     k_initial_guess = 10;
-                    std::cout << "Initial guess: Zero one spin channel, one one the others" << '\n';
                 }
                 else{
                     k_initial_guess = 1010;
-                    std::cout << "Initial guess: Random" << '\n';
                 }
             }
             if(!strcmp(argv[i], "-v") || !strcmp(argv[i], "--verbose")){
@@ -894,6 +890,7 @@ int main(int argc, char *argv[]){
         PRINTVAR(periodicity_direction); PRINTVAR(periodicity_distance);
         PRINTVAR(t); PRINTVAR(threshold); PRINTVAR(hubbard);
         PRINTVAR(k_temperature); PRINTVAR(k_multiplicity);
+        std::cout << "initial_guess = " << ig << "\n\n";
     }
 
 
@@ -949,7 +946,7 @@ int main(int argc, char *argv[]){
 	ofstream myfile;
 	myfile.open("eigenval_eigenvec.txt");
 	if(verbosity){
-        std::cout << "Writing raw Eigenvalues and Eigenvectors to file ..." << '\n';
+        std::cout << "Writing raw Eigenvalues and Eigenvectors to file eigenval_eigenvec.txt ..." << '\n';
 	}
     for(int i = 0; i < basisSize; ++i){
 		myfile << eigen_values[i] << " ";
@@ -969,15 +966,16 @@ int main(int argc, char *argv[]){
 
     ofstream processed_data;
     processed_data.open("processed_ev.txt");
-    std::cout << "Writing processed data (eigenvalue, spin channel, occupation, eigenvector) to file ..." << '\n';
+    std::cout << "Writing processed data (eigenvalue, spin channel, occupation, eigenvector) to file processed_ev.txt ..." << '\n';
     string file_line { "" };
     while(std::getline(read_back, file_line)){
         Postprocessor processor_down(file_line);
         processor_down.process();
         processed_data << processor_down.stringyfy() << "\n";
     }
-
-    std::cout << "Writing done." << '\n';
+    if(verbosity > 0){
+       std::cout << "Writing done." << '\n';
+    }
     return 0;
 }
 
