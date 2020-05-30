@@ -73,7 +73,8 @@ int verbosity{ 1 };
 
 //USAGE:     DEBUG(debug_var++);
 unsigned int debug_var = 0;
-#define DEBUG(x) std::cout << "---------- Reached position: " << (x) << " ----------"<< std::endl;
+#define DEBUG(x) std::cout << "---------- Reached position: " << (x) \
+                           << " ----------"<< std::endl;
 
 #define PRINTVAR(x) std::cout << #x << " = " << (x) << std::endl;
 void print_help(bool full);
@@ -85,7 +86,8 @@ struct Eigenstate{
     std::vector<complex<double>> eigenvector;
 
     friend std::ostream& operator<<(std::ostream& out, Eigenstate es){
-        out << es.spin_channel << " " << es.eigenvalue << " " << es.occupation << " ";
+        out << es.spin_channel << " " << es.eigenvalue << " "
+            << es.occupation << " ";
         for(auto val : es.eigenvector){
             out << "(" << val.real() << ", " << val.imag() << ") ";
         }
@@ -203,14 +205,14 @@ public:
 
     void print_bonds(){
         int bonds_counter = 0;
-        std::cout << "-------------------------------------------------------\n"
+        std::cout << "----------------------------------------------------\n"
                   << "Bonds added: " << '\n';
         for(auto i : bonds_){
             std::cout << "{" << i.first << "," << i.second << "}  ";
             ++bonds_counter;
         }
         std::cout << "\nTotal bonds created: " << bonds_counter
-                  << "\n-------------------------------------------------------\n";
+                  << "\n----------------------------------------------------\n";
     }
 
     void add_bonds(Molecule mol, double threshold){
@@ -229,7 +231,8 @@ public:
                 double x_diff = x_1 > x_2 ? x_1 - x_2 : x_2 - x_1;
                 double y_diff = y_1 > y_2 ? y_1 - y_2 : y_2 - y_1;
                 double z_diff = z_1 > z_2 ? z_1 - z_2 : z_2 - z_1;
-                double result = std::sqrt(x_diff * x_diff + y_diff * y_diff + z_diff * z_diff);
+                double result = std::sqrt(x_diff * x_diff + y_diff * y_diff
+                                          + z_diff * z_diff);
 
                 if(result < bond_threshold_){
                     bonds_.push_back(std::make_pair(i, j));
@@ -293,7 +296,8 @@ Model create_hamiltonian(Molecule mol, Bonds bonds, complex<double> t, bool hubb
     model.construct();
 	model.setTemperature(k_temperature);
 
-    std::cout << "Model size in create_hamiltonian: " << model.getBasisSize() << std::endl;
+    std::cout << "Model size in create_hamiltonian: "
+              << model.getBasisSize() << std::endl;
     return model;
 }
 
@@ -302,7 +306,9 @@ public:
     Postprocessor(string eigenvector) : eigenvector_(eigenvector){};
 
     bool is_close(complex<double> num, complex<double> lim){
-        return (num.real() > lim.real() - threshold && num.real() < lim.real() + threshold && num.imag() > lim.imag() - threshold && num.imag() < lim.imag() + threshold);
+        return (num.real() > lim.real() - threshold && num.real() < lim.real()
+                + threshold && num.imag() > lim.imag() - threshold && num.imag()
+                < lim.imag() + threshold);
     }
 
     void add_entries(ss_t start_of_num, ss_t end_of_num, ss_t end_of_cplx, bool spin_is_up){
@@ -784,10 +790,11 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 
 	//Return whether the spin and site resolved density has converged. The
 	//self-consistent loop will stop once true is returned.
-	if(max_difference > spin_and_site_resolved_density_tol)
-		return false;
-	else
-		return true;
+    return !(max_difference > spin_and_site_resolved_density_tol);
+    // if(max_difference > spin_and_site_resolved_density_tol)
+	// 	return false;
+	// else
+	// 	return true;
 }
 
 int main(int argc, char *argv[]){
@@ -882,10 +889,13 @@ int main(int argc, char *argv[]){
         periodic = true;
     }
 
-    std::cout << "Variable values: " << '\n';
-    PRINTVAR(periodicity_direction); PRINTVAR(periodicity_distance);
-    PRINTVAR(t); PRINTVAR(threshold); PRINTVAR(hubbard);
-    PRINTVAR(k_temperature); PRINTVAR(k_multiplicity);
+    if(verbosity){
+        std::cout << "Variable values: " << '\n';
+        PRINTVAR(periodicity_direction); PRINTVAR(periodicity_distance);
+        PRINTVAR(t); PRINTVAR(threshold); PRINTVAR(hubbard);
+        PRINTVAR(k_temperature); PRINTVAR(k_multiplicity);
+    }
+
 
     //Usage example
     Molecule example_mol;
@@ -917,6 +927,7 @@ int main(int argc, char *argv[]){
         solver.setSelfConsistencyCallback(self_consistency_callback);
 	    solver.setMaxIterations(1000);
     }
+
 	//Run the solver. This will run a self-consistent loop where the
 	//Hamiltonian first is diagonalized, and then the
 	//self_consistency_callback is called. The procedure is repeated until
@@ -924,8 +935,11 @@ int main(int argc, char *argv[]){
 	//number of iterations is reached.
 	solver.run();
 
-    if(hubbard && k_temperature) std::cout << "Final chemical potential: " << model.getChemicalPotential() << '\n';
-	//Create PropertyExtractor
+    if(verbosity){
+        if(hubbard && k_temperature) std::cout << "Final chemical potential: " \
+                << model.getChemicalPotential() << '\n';
+    }
+
 	PropertyExtractor::Diagonalizer pe(solver);
 
     auto eigen_vectors = solver.getEigenVectors();
@@ -934,15 +948,20 @@ int main(int argc, char *argv[]){
 	int basisSize = model.getBasisSize();
 	ofstream myfile;
 	myfile.open("eigenval_eigenvec.txt");
-	std::cout << "Writing Eigenvalues and Eigenvectors to file ..." << '\n';
-	for(int i = 0; i < basisSize; ++i){
+	if(verbosity){
+        std::cout << "Writing raw Eigenvalues and Eigenvectors to file ..." << '\n';
+	}
+    for(int i = 0; i < basisSize; ++i){
 		myfile << eigen_values[i] << " ";
 		for(int j = 0; j < basisSize; ++j)
 			myfile << eigen_vectors[i*basisSize + j] << " ";
 		myfile << '\n';
 	}
-	std::cout << "Writing done." << '\n';
-	myfile.close();
+    if(verbosity > 0){
+	   std::cout << "Writing done." << '\n';
+    }
+
+    myfile.close();
 
     std::ifstream read_back;
     read_back.open("eigenval_eigenvec.txt");
