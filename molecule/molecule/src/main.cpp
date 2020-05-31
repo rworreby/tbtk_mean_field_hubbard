@@ -91,6 +91,7 @@ struct Eigenstate{
         for(auto val : es.eigenvector){
             out << "(" << val.real() << ", " << val.imag() << ") ";
         }
+        out << "\n";
         return out;
     }
 };
@@ -615,8 +616,9 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
     	{IDX_ALL, IDX_ALL}
     });
 
+    std::vector<Eigenstate> eigenstates;
+
     if(k_multiplicity){
-        std::vector<Eigenstate> eigenstates;
         const int basis_size = model.getBasisSize();
 
         for(int i = 0; i < basis_size; ++i){
@@ -697,11 +699,7 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
             }
         }
 
-        // std::cout << "Occupations:" << '\n';
-        // for (size_t i = 0; i < eigenstates.size(); i++) {
-        //     std::cout << eigenstates[i].eigenvalue << " " << eigenstates[i].spin_channel
-        //               << " " << eigenstates[i].occupation << '\n';
-        // }
+
 
         // std::cout << "Current density:" << '\n';
         // for (size_t i = 0; i < basis_size/2; i++) {
@@ -790,11 +788,28 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 
 	//Return whether the spin and site resolved density has converged. The
 	//self-consistent loop will stop once true is returned.
-    return !(max_difference > spin_and_site_resolved_density_tol);
-    // if(max_difference > spin_and_site_resolved_density_tol)
-	// 	return false;
-	// else
-	// 	return true;
+    if(max_difference > spin_and_site_resolved_density_tol)
+		return false;
+	else{
+        if(k_multiplicity){
+            std::ofstream afile("ev_with_occupations.txt", std::ios::out);
+            if (afile.is_open()) {
+                for (size_t i = 0; i < eigenstates.size(); i++) {
+                    afile << eigenstates[i];
+                    // afile << eigenstates[i].eigenvalue;
+                    // afile << " ";
+                    // afile << eigenstates[i].spin_channel;
+                    // afile << " ";
+                    // afile << eigenstates[i].occupation;
+                    // afile << " ";
+                    // afile << eigenstates[i].eigenvector;
+                    // afile << '\n';
+                }
+                afile.close();
+            }
+        }
+        return true;
+    }
 }
 
 int main(int argc, char *argv[]){
@@ -888,7 +903,7 @@ int main(int argc, char *argv[]){
     if(verbosity){
         std::cout << "Variable values: " << '\n';
         PRINTVAR(periodicity_direction); PRINTVAR(periodicity_distance);
-        PRINTVAR(t); PRINTVAR(threshold); PRINTVAR(hubbard);
+        PRINTVAR(t); PRINTVAR(threshold); PRINTVAR(U);
         PRINTVAR(k_temperature); PRINTVAR(k_multiplicity);
         std::cout << "initial_guess = " << ig << "\n\n";
     }
@@ -962,7 +977,6 @@ int main(int argc, char *argv[]){
 
     std::ifstream read_back;
     read_back.open("eigenval_eigenvec.txt");
-
 
     ofstream processed_data;
     processed_data.open("processed_ev.txt");
