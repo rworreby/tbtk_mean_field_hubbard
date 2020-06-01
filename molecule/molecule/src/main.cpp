@@ -792,10 +792,14 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 		return false;
 	else{
         if(k_multiplicity){
+            double total_energy{ 0.0 };
             std::ofstream afile("ev_with_occupations.txt", std::ios::out);
             if (afile.is_open()) {
                 for (size_t i = 0; i < eigenstates.size(); i++) {
                     afile << eigenstates[i];
+                    if(eigenstates[i].occupation){
+                        total_energy += eigenstates[i].eigenvalue;
+                    }
                     // afile << eigenstates[i].eigenvalue;
                     // afile << " ";
                     // afile << eigenstates[i].spin_channel;
@@ -806,6 +810,7 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
                     // afile << '\n';
                 }
                 afile.close();
+                std::cout << "\nTotal Energy: " << total_energy << '\n';
             }
         }
         return true;
