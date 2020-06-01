@@ -923,7 +923,10 @@ int main(int argc, char *argv[]){
     //Create bonds in molecule
     bonds.add_bonds(example_mol, threshold);
     //bonds.print_bonds();
-    //bonds.print_hoppings();
+
+    if(verbosity == 2){
+        bonds.print_hoppings();
+    }
 
     Array<double> dummy_array({2, example_mol.size()});
     spin_and_site_resolved_density = dummy_array;
@@ -937,7 +940,7 @@ int main(int argc, char *argv[]){
 	solver.setModel(model);
     if(hubbard){
         solver.setSelfConsistencyCallback(self_consistency_callback);
-	    solver.setMaxIterations(1000);
+	    solver.setMaxIterations(10000);
     }
 
 	//Run the solver. This will run a self-consistent loop where the
