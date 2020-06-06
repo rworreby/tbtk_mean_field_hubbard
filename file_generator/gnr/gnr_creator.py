@@ -46,14 +46,16 @@ def main(argv):
 
         x += reg_dist
 
+    """
     for i in atoms:
         print("%.5f" % i, end=' ')
     print("")
+    """
 
     z = 0.0
 
     file_out_name = "{}_AGNR_len_{}.xyz".format(str(band_thickness), str(band_length))
-    print("file output name is:", file_out_name)
+    print("generated file is named:", file_out_name)
 
     f = open(file_out_name, "w+")
 
