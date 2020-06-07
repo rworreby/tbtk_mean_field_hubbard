@@ -53,8 +53,9 @@ complex<double> H_U(const Index &toIndex, const Index &fromIndex);
 
 std::complex<double> i(0, 1);
 double U{ 0.0 };
-double spin_and_site_resolved_density_tol{ 1e-5 };
-double k_density_tolerance{ 1e-7 };
+complex<double> t{ 0.0 };
+double spin_and_site_resolved_density_tol{ 1e-5 }; //5
+double k_density_tolerance{ 1e-7 }; //7
 double k_target_density_per_site{ 1.0 };
 double k_mixing_parameter{ 0.5 };
 double k_temperature{ 0.001 };
@@ -63,6 +64,7 @@ int k_initial_guess{ 0101 };
 Model model;
 Array<double> spin_and_site_resolved_density;
 size_t k_num_atoms{ 0 };
+size_t k_num_unit_cells{ 0 };
 
 
 ofstream scf_convergence;
@@ -78,6 +80,19 @@ unsigned int debug_var = 0;
 
 #define PRINTVAR(x) std::cout << #x << " = " << (x) << std::endl;
 void print_help(bool full);
+
+template <typename T>
+std::vector<T> operator+(const std::vector<T>& a, const std::vector<T>& b)
+{
+    assert(a.size() == b.size());
+
+    std::vector<T> result;
+    result.reserve(a.size());
+
+    std::transform(a.begin(), a.end(), b.begin(),
+                   std::back_inserter(result), std::plus<T>());
+    return result;
+}
 
 struct Eigenstate{
     double eigenvalue;
@@ -496,6 +511,7 @@ void init_spin_and_site_resolved_density(Array<double>& spin_and_site_resolved_d
                     {spin, site}
                 ] = get_initial_guess(spin);
             }
+
         }
         else{
             for(unsigned int site = 0; site < k_num_atoms; site++){
@@ -616,11 +632,13 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
     	{IDX_ALL, IDX_ALL}
     });
 
+    const int basis_size = model.getBasisSize();
+
     std::vector<Eigenstate> eigenstates;
+    std::vector<double> density_up(basis_size/2, 0.0);
+    std::vector<double> density_down(basis_size/2, 0.0);
 
     if(k_multiplicity){
-        const int basis_size = model.getBasisSize();
-
         for(int i = 0; i < basis_size; ++i){
 
             bool state {false};
@@ -673,8 +691,6 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 
         int counter_up {0};
         int counter_down {0};
-        std::vector<double> density_up(basis_size/2, 0.0);
-        std::vector<double> density_down(basis_size/2, 0.0);
 
         for (size_t j = 0; j < basis_size; j++){
             if(!eigenstates[j].spin_channel){
@@ -754,7 +770,7 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
     				] + (1 - k_mixing_parameter)*density_temp({
     					static_cast<int>(site),
                         static_cast<int>(spin)
-    				});///(model.getBasisSize()/k_num_atoms);
+    			});///(model.getBasisSize()/k_num_atoms);
 
     		}
     	}
@@ -793,34 +809,49 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 	else{
         if(k_multiplicity){
             double total_energy{ 0.0 };
+            double magnetization{ 0.0 };
             std::ofstream afile("ev_with_occupations.txt", std::ios::out);
             if (afile.is_open()) {
                 for (size_t i = 0; i < eigenstates.size(); i++) {
                     afile << eigenstates[i];
                     if(eigenstates[i].occupation){
                         total_energy += eigenstates[i].eigenvalue;
+                        //spin_density = spin_density + eigenstates[i].eigenvector;
                     }
-                    // afile << eigenstates[i].eigenvalue;
-                    // afile << " ";
-                    // afile << eigenstates[i].spin_channel;
-                    // afile << " ";
-                    // afile << eigenstates[i].occupation;
-                    // afile << " ";
-                    // afile << eigenstates[i].eigenvector;
-                    // afile << '\n';
+                }
+                std::cout << '\n';
+                for (size_t i = 0; i < density_down.size(); i++) {
+                    magnetization += std::abs(density_down[i] - density_up[i]);
                 }
                 afile.close();
-                std::cout << "\nTotal Energy: " << total_energy << '\n';
+                std::cout << "Total Magnetization: " << magnetization << '\n';
+                std::cout << "Total Energy: " << total_energy << '\n';
             }
+
+            std::ofstream scaling_results("7agnr_scaling.txt", std::ios::app);
+            if (scaling_results.is_open()) {
+                scaling_results << k_num_unit_cells;
+                scaling_results << ",";
+                scaling_results << k_multiplicity;
+                scaling_results << ",";
+                scaling_results << (U/t.real());
+                scaling_results << ",";
+                scaling_results << magnetization;
+                scaling_results << ",";
+                scaling_results << total_energy;
+                scaling_results << "\n";
+                scaling_results.close();
+            }
+
         }
         return true;
     }
 }
 
+
 int main(int argc, char *argv[]){
     string periodicity_direction { "" };
     double periodicity_distance { 0.0 };
-    complex<double> t { 1.0 };
     double threshold { 1.7 };
     bool hubbard { false };
     int multiplicity { 0 };
@@ -834,6 +865,13 @@ int main(int argc, char *argv[]){
         print_help(false); exit(0);
     }
     string file = argv[1];
+
+    // Extracting the number of unit cells from the input file
+    string length{ "" };
+    for(int i = 24; i < file.size()-4; ++i){
+        length += file[i];
+    }
+    k_num_unit_cells = std::stoi(length);
     std::ifstream in(file);
 
     for(int i = 0; i < argc; ++i){
@@ -945,7 +983,7 @@ int main(int argc, char *argv[]){
 	solver.setModel(model);
     if(hubbard){
         solver.setSelfConsistencyCallback(self_consistency_callback);
-	    solver.setMaxIterations(10000);
+	    solver.setMaxIterations(1000);
     }
 
 	//Run the solver. This will run a self-consistent loop where the
