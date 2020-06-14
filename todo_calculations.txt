@@ -6,7 +6,7 @@
 
         == Study singlet/triplet difference.
            y-axis: singlet-triplet diff, x-axis: length
-         == Error in plotting script -> fix and send pics to K
+
 
     == Plot the total absolute magnetization (abs sum of spin-density) vs varying U
         - Vary length of ANGR
