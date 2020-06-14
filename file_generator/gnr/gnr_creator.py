@@ -1,5 +1,5 @@
-import numpy as np
 import sys
+
 
 def main(argv):
     atoms = []
@@ -54,7 +54,10 @@ def main(argv):
 
     z = 0.0
 
-    file_out_name = "{}_AGNR_len_{}.xyz".format(str(band_thickness), str(band_length))
+    file_out_name = "{}_AGNR_len_{}.xyz".format(
+        str(band_thickness),
+        str(band_length)
+    )
     print("generated file is named:", file_out_name)
 
     f = open(file_out_name, "w+")
@@ -62,6 +65,7 @@ def main(argv):
     f.write("%d\n\n" % (len(atoms)/2))
     for i in range(0, len(atoms), 2):
         f.write("C   %9.5f %9.5f %9.5f\n" % (atoms[i], atoms[i+1], z))
+
 
 if __name__ == '__main__':
     main(sys.argv[1:])
