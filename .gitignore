@@ -2,3 +2,6 @@ processed_ev.txt
 results.txt
 eigenval_eigenvec.txt
 .ipynb_checkpoints/
+scf_convergence.txt
+ev_with_occupations.txt
+old/
