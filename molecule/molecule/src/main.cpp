@@ -69,9 +69,10 @@ size_t k_num_unit_cells{ 0 };
 
 ofstream scf_convergence;
 int iteration_counter{ 0 };
-int run{ 0 };
+int run{ 9 };
 
 int verbosity{ 1 };
+int k_num_iterations{ 1000 };
 
 //USAGE:     DEBUG(debug_var++);
 unsigned int debug_var = 0;
@@ -858,7 +859,7 @@ int main(int argc, char *argv[]){
     string ig{ "" };
 
     scf_convergence.open("scf_convergence.txt");
-    scf_convergence << "run,iteration,error" << std::endl;
+    // scf_convergence << "run,iteration,error" << std::endl;
 
     if(argc == 1){
         std::cout << "You need to provide at least a file." << '\n';
@@ -867,11 +868,11 @@ int main(int argc, char *argv[]){
     string file = argv[1];
 
     // Extracting the number of unit cells from the input file
-    string length{ "" };
-    for(int i = 24; i < file.size()-4; ++i){
-        length += file[i];
-    }
-    k_num_unit_cells = std::stoi(length);
+    // string length{ "" };
+    // for(int i = 24; i < file.size()-4; ++i){
+    //     length += file[i];
+    // }
+    // k_num_unit_cells = std::stoi(length);
     std::ifstream in(file);
 
     for(int i = 0; i < argc; ++i){
@@ -893,6 +894,10 @@ int main(int argc, char *argv[]){
             if(!strcmp(argv[i], "-T") || !strcmp(argv[i], "--temperature")){
                 k_temperature = std::stod(argv[++i]);
             }
+            if(!strcmp(argv[i], "-it") || !strcmp(argv[i], "--iterations")){
+                k_num_iterations = std::stod(argv[++i]);
+            }
+
             if(!strcmp(argv[i], "-M") || !strcmp(argv[i], "--multiplicity")){
                 multiplicity = std::stod(argv[++i]);
                 k_multiplicity = multiplicity;
@@ -983,7 +988,7 @@ int main(int argc, char *argv[]){
 	solver.setModel(model);
     if(hubbard){
         solver.setSelfConsistencyCallback(self_consistency_callback);
-	    solver.setMaxIterations(1000);
+	    solver.setMaxIterations(k_num_iterations);
     }
 
 	//Run the solver. This will run a self-consistent loop where the
@@ -1065,9 +1070,10 @@ void print_help(bool full){
             \t\t\t  i.e. the solution that is to be found. \n\
             \t\t\t  Default is no specific solution desired. \n\
             \t\t\t  This is mutually exclusive with the -T (temperature) parameter. \n");
+    printf("  -it or --iterations \t\t- sets the max number of iterations for the self-consistent loop. \n");
     printf("  -ig or --initial_guess \t- lets you set the inital spin and site resolved density.\n\
-            \t\t\t  possibilities are: zero, one, zeroone, random. \n\
-            \t\t\t  Where 'zeroone' mean 1 on one spin channel and 0 on the other.\n\
+            \t\t\t  Possibilities are: zero, one, zeroone, random. \n\
+            \t\t\t  Where 'zeroone' means 1 on one spin channel and 0 on the other.\n\
             \t\t\t  Default is random.\n");
     printf("  -v or --verbose \t\t- prints additional information.\n");
     printf("  -q or --quiet \t\t- prints only the bare minimum.\n");
