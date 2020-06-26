@@ -42,7 +42,7 @@ using std::ofstream;
 const double k_eps { 0.0001 };
 const double atomic_radii_C { 0.68 };
 const double threshold { 1e-4 };
-const int k_size_brillouin_zone{ 100 };
+const int k_size_brillouin_zone{ 500 };
 size_t k_num_atoms_unit_cell { 0 };
 std::complex<double> i(0, 1);
 Array<double> spinAndSiteResolvedDensity;
