@@ -447,8 +447,16 @@ public:
 
     string stringyfy(){
         string eigenvector {""};
+        static double total_energy_stringyfy{ 0.0 };
+        static int total_energy_counter{ 0 };
+        total_energy_counter++;
+        total_energy_stringyfy += std::stod(eigenvalue_);
+        if(total_energy_counter == 19){
+            std::cout << "Total energy: " << total_energy_stringyfy << '\n';
+        }
+
         if(spin_up_.size()){
-            eigenvector += "su " + eigenvalue_;
+            eigenvector += "1 " + eigenvalue_;
             for(auto i : spin_up_){
                 eigenvector += " (";
                 eigenvector += std::to_string(i.real());
@@ -458,7 +466,7 @@ public:
             }
         }
         else{
-            eigenvector += "sd " + eigenvalue_;
+            eigenvector += "0 " + eigenvalue_;
             for(auto i : spin_down_){
                 eigenvector += " (" + std::to_string(i.real());
                 eigenvector += ",";
@@ -795,8 +803,8 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 		}
 	}
 
-    scf_convergence << run << "," << iteration_counter++ << ",";
-    scf_convergence << diff_total << std::endl;
+    // scf_convergence << run << "," << iteration_counter++ << ",";
+    // scf_convergence << diff_total << std::endl;
     // std::cout << "Conv. difference:"
     //             << std::abs(max_difference - spin_and_site_resolved_density_tol)
     //             << "\tabs. value: "
@@ -811,6 +819,7 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
         if(k_multiplicity){
             double total_energy{ 0.0 };
             double magnetization{ 0.0 };
+            std::cout << "Writing results to ev_with_occupations.txt" << '\n';
             std::ofstream afile("ev_with_occupations.txt", std::ios::out);
             if (afile.is_open()) {
                 for (size_t i = 0; i < eigenstates.size(); i++) {
@@ -829,20 +838,20 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
                 std::cout << "Total Energy: " << total_energy << '\n';
             }
 
-            std::ofstream scaling_results("7agnr_scaling.txt", std::ios::app);
-            if (scaling_results.is_open()) {
-                scaling_results << k_num_unit_cells;
-                scaling_results << ",";
-                scaling_results << k_multiplicity;
-                scaling_results << ",";
-                scaling_results << (U/t.real());
-                scaling_results << ",";
-                scaling_results << magnetization;
-                scaling_results << ",";
-                scaling_results << total_energy;
-                scaling_results << "\n";
-                scaling_results.close();
-            }
+            // std::ofstream scaling_results("7agnr_scaling.txt", std::ios::app);
+            // if (scaling_results.is_open()) {
+            //     scaling_results << k_num_unit_cells;
+            //     scaling_results << ",";
+            //     scaling_results << k_multiplicity;
+            //     scaling_results << ",";
+            //     scaling_results << (U/t.real());
+            //     scaling_results << ",";
+            //     scaling_results << magnetization;
+            //     scaling_results << ",";
+            //     scaling_results << total_energy;
+            //     scaling_results << "\n";
+            //     scaling_results.close();
+            // }
 
         }
         return true;
@@ -858,7 +867,7 @@ int main(int argc, char *argv[]){
     int multiplicity { 0 };
     string ig{ "" };
 
-    scf_convergence.open("scf_convergence.txt");
+    // scf_convergence.open("scf_convergence.txt");
     // scf_convergence << "run,iteration,error" << std::endl;
 
     if(argc == 1){
