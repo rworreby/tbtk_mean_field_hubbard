@@ -650,6 +650,13 @@ int main(int argc, char **argv) {
             if(!strcmp(argv[i], "-T") || !strcmp(argv[i], "--temperature")){
                 temperature = std::stod(argv[++i]);
             }
+            if(!strcmp(argv[i], "-M") || !strcmp(argv[i], "--multiplicity")){
+                multiplicity = std::stod(argv[++i]);
+                if(temperature != 0.01){
+                    std::cout << "Setting temperature to 0." << '\n';
+                }
+                temperature = 0;
+            }
             if(!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")){
                 print_help(true); exit(0);
             }
@@ -658,6 +665,14 @@ int main(int argc, char **argv) {
             std::cout << "Invalid amount of parameters. Don't forget to provide a value for the flags you're setting!" << '\n';
             print_help(false); exit(0);
         }
+    }
+    if(multiplicity && temperature){
+        std::cout << "Invalid parameter combination. Cannot use both temperature and multiplicity as inputs at the same time." << '\n';
+        print_help(false); exit(0);
+    }
+    bool periodic = false;
+    if(periodicity_direction != ""){
+        periodic = true;
     }
 
     std::cout << "Parameter values: " << '\n';
@@ -1096,11 +1111,21 @@ void print_help(bool full){
         printf("/**********************************************************************/\n");
         printf("\n");
     }
-    printf("Usage: \n./Application molecule.xyz [parameters]\nParameters:\n");
-    printf("  -p or --periodic \t\t- sets the periodicity direction and distance, two parameters needed [X, Y, Z] and [distance]\n");
-    printf("  -t or --hopping_amplitude \t- sets the Hamiltonian parameter t value (Hopping amplitude), default is 1.0\n");
+    printf("Usage: \n./Application molecule.xyz [parameters] \nPossible parameters:\n");
+    printf("  -p or --periodic \t\t- sets the periodicity direction and distance, \n\
+            \t\t\t  two parameters needed [X, Y, Z] and [distance]. \n\
+            \t\t\t  Currently only X-direction is supported.\n");
+    printf("  -t or --hopping_amplitude \t- sets the Hamiltonian parameter \n\
+            \t\t\t  t value (Hopping amplitude), default is 1.0\n");
     printf("  -b or --bond_threshold \t- sets the bond threshold in Ångström\n");
-    printf("  -H or --Hubbard \t\t- sets the Hamiltonian parameter U, default is 0.0 \n");
-    printf("  -T or --temperature \t\t- sets the temperature for the system in K, default is 0.01 K\n");
+    printf("  -H or --Hubbard \t\t- sets the Hamiltonian parameter U, \n\
+            \t\t\t  default is 0.0 \n");
+    printf("  -T or --temperature \t\t- sets the temperature for the system in K, \n\
+            \t\t\t  default is 0.01 K. \n\
+            \t\t\t  This is mutually exclusive with the -M (multiplicity) parameter. \n");
+    printf("  -M or --multiplicity \t\t- sets the multiplicity, \n\
+            \t\t\t  i.e. the solution that is to be found. \n\
+            \t\t\t  Default is no specific solution desired. \n\
+            \t\t\t  This is mutually exclusive with the -T (temperature) parameter. \n");
     printf("  -h or --help \t\t\t- prints this help info.\n");
 }

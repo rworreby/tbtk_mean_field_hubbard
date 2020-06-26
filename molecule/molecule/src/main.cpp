@@ -31,17 +31,14 @@ c++ molecule_meanfield_hubbard.cpp -o main && ./main clars_goblet.xyz -t 1.8 -b 
 #include "TBTK/ParameterSet.h"
 #include "TBTK/Property/DOS.h"
 #include "TBTK/Property/EigenValues.h"
-#include "TBTK/PropertyExtractor/BlockDiagonalizer.h"
 #include "TBTK/PropertyExtractor/Diagonalizer.h"
 #include "TBTK/Range.h"
-#include "TBTK/Solver/BlockDiagonalizer.h"
 #include "TBTK/Solver/Diagonalizer.h"
 #include "TBTK/Vector2d.h"
 
 //#include "molecule_meanfield_hubbard.hpp"
 
 using comperator_t = std::function<bool(double, double)>;
-using cartesian_grid_t = std::multiset<int, std::pair<double, double>>;
 using bonds_t = std::vector<std::pair<int, int>>;
 using ss_t = std::string::size_type;
 using std::string;
@@ -56,27 +53,64 @@ complex<double> H_U(const Index &toIndex, const Index &fromIndex);
 
 std::complex<double> i(0, 1);
 double U{ 0.0 };
-double spin_and_site_resolved_density_tol{ 1e-5 };
-double k_density_tolerance{ 1e-7 };
+complex<double> t{ 0.0 };
+double spin_and_site_resolved_density_tol{ 1e-5 }; //5
+double k_density_tolerance{ 1e-7 }; //7
 double k_target_density_per_site{ 1.0 };
 double k_mixing_parameter{ 0.5 };
-bool k_multiplicity{ false };
+double k_temperature{ 0.001 };
+int k_multiplicity{ 0 };
+int k_initial_guess{ 0101 };
 Model model;
 Array<double> spin_and_site_resolved_density;
 size_t k_num_atoms{ 0 };
+size_t k_num_unit_cells{ 0 };
 
 
 ofstream scf_convergence;
-int iteration_counter = 0;
-int run = 9;
+int iteration_counter{ 0 };
+int run{ 9 };
 
+int verbosity{ 1 };
+int k_num_iterations{ 1000 };
 
 //USAGE:     DEBUG(debug_var++);
 unsigned int debug_var = 0;
-#define DEBUG(x) std::cout << "---------- Reached position: " << (x) << " ----------"<< std::endl;
+#define DEBUG(x) std::cout << "---------- Reached position: " << (x) \
+                           << " ----------"<< std::endl;
 
 #define PRINTVAR(x) std::cout << #x << " = " << (x) << std::endl;
 void print_help(bool full);
+
+template <typename T>
+std::vector<T> operator+(const std::vector<T>& a, const std::vector<T>& b)
+{
+    assert(a.size() == b.size());
+
+    std::vector<T> result;
+    result.reserve(a.size());
+
+    std::transform(a.begin(), a.end(), b.begin(),
+                   std::back_inserter(result), std::plus<T>());
+    return result;
+}
+
+struct Eigenstate{
+    double eigenvalue;
+    bool spin_channel;
+    double occupation;
+    std::vector<complex<double>> eigenvector;
+
+    friend std::ostream& operator<<(std::ostream& out, Eigenstate es){
+        out << es.spin_channel << " " << es.eigenvalue << " "
+            << es.occupation << " ";
+        for(auto val : es.eigenvector){
+            out << "(" << val.real() << ", " << val.imag() << ") ";
+        }
+        out << "\n";
+        return out;
+    }
+};
 
 struct XYZCoordinate{
     float x;
@@ -164,20 +198,6 @@ public:
         }
     }
 
-    // double find_unit_cell_size(){
-    //     double max_val=0, min_val=0;
-    //
-    //     comperator_t compFunctor = [](double elem1, double elem2){
-	// 			return elem1 < elem2;
-	// 	};
-    //     std::sort(val_y.begin(), val_y.end(), compFunctor);
-    //
-    //     min_val = val_y[0];
-    //     max_val = val_y[val_y.size()-1];
-    //
-    //     return max_val - min_val;
-    // }
-
     size_t size(){
         return atoms_.size();
     }
@@ -202,14 +222,14 @@ public:
 
     void print_bonds(){
         int bonds_counter = 0;
-        std::cout << "-------------------------------------------------------\n"
+        std::cout << "----------------------------------------------------\n"
                   << "Bonds added: " << '\n';
         for(auto i : bonds_){
             std::cout << "{" << i.first << "," << i.second << "}  ";
             ++bonds_counter;
         }
         std::cout << "\nTotal bonds created: " << bonds_counter
-                  << "\n-------------------------------------------------------\n";
+                  << "\n----------------------------------------------------\n";
     }
 
     void add_bonds(Molecule mol, double threshold){
@@ -228,12 +248,9 @@ public:
                 double x_diff = x_1 > x_2 ? x_1 - x_2 : x_2 - x_1;
                 double y_diff = y_1 > y_2 ? y_1 - y_2 : y_2 - y_1;
                 double z_diff = z_1 > z_2 ? z_1 - z_2 : z_2 - z_1;
-                double result = std::sqrt(x_diff * x_diff + y_diff * y_diff + z_diff * z_diff);
-                //static int counter_same_dist = 0;
+                double result = std::sqrt(x_diff * x_diff + y_diff * y_diff
+                                          + z_diff * z_diff);
 
-                //if two atoms are inside the sum of their atomic radii
-                //(plus a threshold that is provided by the user, default 1.3)
-                //there is a bond between them
                 if(result < bond_threshold_){
                     bonds_.push_back(std::make_pair(i, j));
                 }
@@ -266,7 +283,6 @@ public:
 
     bonds_t bonds_;
 private:
-    //adjacency list for all bonds
     double bond_threshold_;
     friend class Molecule;
 
@@ -295,9 +311,10 @@ Model create_hamiltonian(Molecule mol, Bonds bonds, complex<double> t, bool hubb
         }
     }
     model.construct();
-	model.setTemperature(0.001);
+	model.setTemperature(k_temperature);
 
-    std::cout << "Model size in create_hamiltonian: " << model.getBasisSize() << std::endl;
+    std::cout << "Model size in create_hamiltonian: "
+              << model.getBasisSize() << std::endl;
     return model;
 }
 
@@ -306,7 +323,9 @@ public:
     Postprocessor(string eigenvector) : eigenvector_(eigenvector){};
 
     bool is_close(complex<double> num, complex<double> lim){
-        return (num.real() > lim.real() - threshold && num.real() < lim.real() + threshold && num.imag() > lim.imag() - threshold && num.imag() < lim.imag() + threshold);
+        return (num.real() > lim.real() - threshold && num.real() < lim.real()
+                + threshold && num.imag() > lim.imag() - threshold && num.imag()
+                < lim.imag() + threshold);
     }
 
     void add_entries(ss_t start_of_num, ss_t end_of_num, ss_t end_of_cplx, bool spin_is_up){
@@ -362,13 +381,9 @@ public:
             end_of_cplx = eigenvector_.find(')', end_of_cplx+1);
 
             number_1 = eigenvector_.substr(start_of_num+1, end_of_num-start_of_num-1);
-            //std::cout << "number_1: " << number_1 << '\n';
             number_2 = eigenvector_.substr(end_of_num+1, end_of_cplx-end_of_num-1);
-            //std::cout << "number_2: " << number_2 << '\n';
 
             complex<double> second_num {std::stod(number_1), std::stod(number_2)};
-
-            //std::cout << "The first two numbers: " << first_num << " " << second_num << '\n';
 
             bool spin_is_up = true;
             complex<double> zero {0.0,0.0};
@@ -380,7 +395,6 @@ public:
             complex<double> sum_odd { std::abs(temp_2) };
             ss_t temp_end_of_cplx { end_of_cplx };
 
-            //std::cout << "eigenvector_: " << eigenvector_ << '\n';
             while (start_of_num != string::npos) {
                 start_of_num = eigenvector_.find('(', end_of_cplx+1);
                 end_of_num = eigenvector_.find(',', end_of_cplx+1);
@@ -405,8 +419,6 @@ public:
 
             }
 
-            //std::cout << "Sum even: " << sum_even << '\n';
-            //std::cout << "Sum odd: " << sum_odd << '\n';
             start_of_num = eigenvector_.find('(', 4);
             end_of_num = eigenvector_.find(',', start_of_num);
             end_of_cplx = eigenvector_.find(')', end_of_num);
@@ -435,8 +447,16 @@ public:
 
     string stringyfy(){
         string eigenvector {""};
+        static double total_energy_stringyfy{ 0.0 };
+        static int total_energy_counter{ 0 };
+        total_energy_counter++;
+        total_energy_stringyfy += std::stod(eigenvalue_);
+        if(total_energy_counter == 19){
+            std::cout << "Total energy: " << total_energy_stringyfy << '\n';
+        }
+
         if(spin_up_.size()){
-            eigenvector += "su " + eigenvalue_;
+            eigenvector += "1 " + eigenvalue_;
             for(auto i : spin_up_){
                 eigenvector += " (";
                 eigenvector += std::to_string(i.real());
@@ -446,7 +466,7 @@ public:
             }
         }
         else{
-            eigenvector += "sd " + eigenvalue_;
+            eigenvector += "0 " + eigenvalue_;
             for(auto i : spin_down_){
                 eigenvector += " (" + std::to_string(i.real());
                 eigenvector += ",";
@@ -468,20 +488,50 @@ private:
 double Postprocessor::threshold = 1e-9;
 
 
+double get_initial_guess(bool spin){
+    switch(k_initial_guess){
+        case 0:
+            return 0;
+            break;
+        case 1:
+            return 1;
+            break;
+        case 10:
+            return spin;
+            break;
+        case 1010:
+            return (rand()%100)/100.0;
+            break;
+        default:
+            return (rand()%100)/100.0;
+    }
+}
+
+
 /** Start self consistet mean-field Hubbard **/
 
-//Initialize the spin and site resolved density with random numbers between 0
-//and 1.
+
 void init_spin_and_site_resolved_density(Array<double>& spin_and_site_resolved_density){
 	srand(time(nullptr));
 	for(unsigned int spin = 0; spin < 2; spin++){
-		for(unsigned int site = 0; site < k_num_atoms; site++){
-			spin_and_site_resolved_density[
-				{spin, site}
-			] = (rand()%100)/100.0;
-		}
-	}
+        if(spin){
+            for(unsigned int site = 0; site < k_num_atoms; site++){
+                spin_and_site_resolved_density[
+                    {spin, site}
+                ] = get_initial_guess(spin);
+            }
+
+        }
+        else{
+            for(unsigned int site = 0; site < k_num_atoms; site++){
+                spin_and_site_resolved_density[
+                    {spin, site}
+                ] = get_initial_guess(spin);
+            }
+        }
+    }
 }
+
 
 //Callback function responsible for returning the current value of H_U for the
 //given indices. Since H_U is supposed to be diagonal, toIndex and fromIndex is
@@ -533,19 +583,13 @@ void fixDensity(PropertyExtractor::Diagonalizer &propertyExtractor){
 				)/(model.getBasisSize()/4);
 		}
 
-		//Exit the loop if the target density is met within the given
-		//tolerance.
 		if(
 			abs(density_per_unit_cell - 2*k_target_density_per_site)
 			< k_density_tolerance
 		){
-            //std::cout << "Density per site: " << density_per_unit_cell << '\n';
-            //std::cout << "Final chemical potetntial: " << model.getChemicalPotential() << '\n';
 			break;
 		}
 
-		//Determine whether an overshot has occured and step the chemical
-		//potential.
 		if(density_per_unit_cell < 2*k_target_density_per_site){
 			if(step_direction == -1){
 				has_overshot = true;
@@ -580,111 +624,187 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 	PropertyExtractor::Diagonalizer propertyExtractor(solver);
 
     auto eigen_values = solver.getEigenValues();
-    // static int temp = 1;
-    // if(temp++ == 1){
-    //     for(int i = 0; i < model.getBasisSize(); ++i){
-    //       std::cout << eigen_values[i] << " ";
-    //     }
-    // }
-
-
-    /** Pseudo code:
-    Property::Density density = Null
-    n_s0 = 10
-    n_s1 = 12
-
-    spin_occs = [n_s0, n_s1]
-
-    for i_spin in range(2):
-        for i_eval in range(num_eigenvalues):
-            if i_eval > spin_occs[i_spin]:
-                break
-            //eval = eigenvalues[spin=0][i_eval]
-            evec = eigenvectors[i_spin][i_eval]
-
-    density[i_spin] += evec
-    **/
-
-
-    /**
     auto eigen_vectors = solver.getEigenVectors();
-    auto eigen_values = solver.getEigenValues();
-    int basisSize = model.getBasisSize();
-    for(int i = 0; i < basisSize; ++i){
-      myfile << eigen_values[i] << " ";
-      for(int j = 0; j < basisSize; ++j)
-          myfile << eigen_vectors[i*basisSize + j] << " ";
-      myfile << '\n';
-    }
-    **/
-    std::cout << "k mult: " << k_multiplicity << '\n';
-	if(!k_multiplicity){
+
+    if(k_temperature){
         fixDensity(propertyExtractor);
     }
 
     Array<double> old_spin_and_site_resolved_density
-		= spin_and_site_resolved_density;
+        = spin_and_site_resolved_density;
 
-	//Calculate the spin and site resolved density. Note that the k-indices
-	//are summed over using the IDX_SUM_ALL specifier, while the density is
-	//stored separately for each spin and site because of the IDX_ALL
-	//specifier.
-	Property::Density density = propertyExtractor.calculateDensity({
-		{IDX_ALL, IDX_ALL}
-	});
+    //Calculate the spin and site resolved density. Note that the k-indices
+    //are summed over using the IDX_SUM_ALL specifier, while the density is
+    //stored separately for each spin and site because of the IDX_ALL
+    //specifier.
+    Property::Density density_temp = propertyExtractor.calculateDensity({
+    	{IDX_ALL, IDX_ALL}
+    });
 
-    // for(unsigned int spin = 0; spin < 2; spin++){
-	// 	for(unsigned int site = 0; site < k_num_atoms; site++){
-    //         std::cout << "Density of spin: " << spin << " and site: " << site << " is: " << density({site, spin}) << '\n';
-    //     }
-    // }
+    const int basis_size = model.getBasisSize();
 
-    static int print_count = 0;
-    if(print_count++ < 3){
-        for (size_t spin_ = 0; spin_ < 2; spin_++) {
-            double total_spin_density = 0;
-            for (size_t site = 0; site < k_num_atoms; site++) {
-                total_spin_density += spin_and_site_resolved_density[{spin_, site}];
+    std::vector<Eigenstate> eigenstates;
+    std::vector<double> density_up(basis_size/2, 0.0);
+    std::vector<double> density_down(basis_size/2, 0.0);
 
+    if(k_multiplicity){
+        for(int i = 0; i < basis_size; ++i){
+
+            bool state {false};
+            double eval {eigen_values[i]};
+            std::vector<complex<double>> evec;
+
+            complex<double> spin_up {0.0, 0.0};
+            complex<double> spin_down {0.0, 0.0};
+
+            for (size_t j = 0; j < basis_size; j+=2) {
+                spin_down += std::abs(eigen_vectors[i*basis_size + j]);
             }
-            std::cout << std::boolalpha;
-            std::cout << "Total spin for spin " << spin_ << " is " << total_spin_density << '\n';
+            for (size_t j = 1; j < basis_size; j+=2) {
+                spin_up += std::abs(eigen_vectors[i*basis_size + j]);
+            }
+            bool up_greater_than_down { std::abs(spin_up.real()) > std::abs(spin_down.real()) };
+
+            state = up_greater_than_down;
+
+            if(up_greater_than_down){
+                for (size_t j = 1; j < basis_size; j+=2) {
+                    evec.push_back(eigen_vectors[i*basis_size + j]);
+                }
+            }
+            else{
+                for (size_t j = 0; j < basis_size; j+=2) {
+                    evec.push_back(eigen_vectors[i*basis_size + j]);
+                }
+            }
+            eigenstates.push_back({eval, state, 0.0, evec});
+        }
+
+
+        int atoms_per_spin_channel {basis_size / 4};
+
+        //TODO: fix for even multiplicity (doublet, quartet, ...)
+
+        int electrons_spin_up {atoms_per_spin_channel};
+        int electrons_spin_down {atoms_per_spin_channel};
+
+        int spin_change {(k_multiplicity-1)/2};
+        electrons_spin_up += spin_change;
+        electrons_spin_down -= spin_change;
+
+        static int print_cap{ 0 };
+        if(!print_cap++){
+            std::cout << "\nelectrons spin up: " << electrons_spin_up << '\n';
+            std::cout << "electrons spin down: " << electrons_spin_down << '\n';
+        }
+
+        int counter_up {0};
+        int counter_down {0};
+
+        for (size_t j = 0; j < basis_size; j++){
+            if(!eigenstates[j].spin_channel){
+                counter_down += 1;
+                if(counter_down > electrons_spin_down){
+                    continue;
+                }
+                eigenstates[j].occupation = 1.0;
+                for (size_t k = 0; k < basis_size/2; k++){
+                    density_down[k] += std::norm(eigenstates[j].eigenvector[k]);
+                }
+            }
+            else{
+                counter_up += 1;
+                if(counter_up > electrons_spin_up){
+                    continue;
+                }
+                eigenstates[j].occupation = 1.0;
+                for (size_t k = 0; k < basis_size/2; k++){
+                    density_up[k] += std::norm(eigenstates[j].eigenvector[k]);
+                }
+            }
+        }
+
+
+
+        // std::cout << "Current density:" << '\n';
+        // for (size_t i = 0; i < basis_size/2; i++) {
+        //     std::cout << curr_density[i] << '\n';
+        // }
+
+
+        // for(unsigned int spin = 0; spin < 2; spin++){
+    	// 	for(unsigned int site = 0; site < k_num_atoms; site++){
+        //         std::cout << "Density of spin: " << spin << " and site: " << site << " is: " << density({site, spin}) << '\n';
+        //     }
+        // }
+
+        // static int print_count = 0;
+        // if(print_count++ < 3){
+        //     for (size_t spin_ = 0; spin_ < 2; spin_++) {
+        //         double total_spin_density = 0;
+        //         for (size_t site = 0; site < k_num_atoms; site++) {
+        //             total_spin_density += spin_and_site_resolved_density[{spin_, site}];
+        //
+        //         }
+        //         // std::cout << std::boolalpha;
+        //         // std::cout << "Total spin for spin " << spin_ << " is " << total_spin_density << '\n';
+        //     }
+        // }
+
+
+        //Update the spin and site resolved density. Mix with the previous
+        //value to stabilize the self-consistent calculation.
+        for(unsigned int site = 0; site < k_num_atoms; site++){
+            spin_and_site_resolved_density[{0, site}]
+                = k_mixing_parameter*spin_and_site_resolved_density[
+                    {0, site}
+                ] + (1 - k_mixing_parameter)*density_down[site]; ///(model.getBasisSize()/k_num_atoms);
+
+        }
+        for(unsigned int site = 0; site < k_num_atoms; site++){
+            spin_and_site_resolved_density[{1, site}]
+        		= k_mixing_parameter*spin_and_site_resolved_density[
+        			{1, site}
+        		] + (1 - k_mixing_parameter)*density_up[site];///(model.getBasisSize()/k_num_atoms);
         }
     }
+    else if(k_temperature){
+    	// //Update the spin and site resolved density. Mix with the previous
+    	// //value to stabilize the self-consistent calculation.
+    	for(unsigned int spin = 0; spin < 2; spin++){
+    		for(unsigned int site = 0; site < k_num_atoms; site++){
+                spin_and_site_resolved_density[{spin, site}]
+    				= k_mixing_parameter*spin_and_site_resolved_density[
+    					{spin, site}
+    				] + (1 - k_mixing_parameter)*density_temp({
+    					static_cast<int>(site),
+                        static_cast<int>(spin)
+    			});///(model.getBasisSize()/k_num_atoms);
 
-	//Update the spin and site resolved density. Mix with the previous
-	//value to stabilize the self-consistent calculation.
-	for(unsigned int spin = 0; spin < 2; spin++){
-		for(unsigned int site = 0; site < k_num_atoms; site++){
-			spin_and_site_resolved_density[{spin, site}]
-				= k_mixing_parameter*spin_and_site_resolved_density[
-					{spin, site}
-				] + (1 - k_mixing_parameter)*density({
-					static_cast<int>(site),
-                    static_cast<int>(spin)
-				});///(model.getBasisSize()/k_num_atoms);
-		}
-	}
+    		}
+    	}
+    }
 
 	//Calculate the maximum difference between the new and old spin and
 	//site resolved density.
-    unsigned int max_spin {0}, max_site{0};
-	double max_difference = 0;
+	double max_difference{ 0 };
+    double diff_total{ 0 };
 	for(unsigned int spin = 0; spin < 2; spin++){
 		for(unsigned int site = 0; site < k_num_atoms; site++){
 			double difference = abs(
 				spin_and_site_resolved_density[{spin, site}]
 				- old_spin_and_site_resolved_density[{spin, site}]
 			);
+            diff_total += difference;
+
 			if(difference > max_difference){
 				max_difference = difference;
-                max_spin = spin; max_site = site;
             }
 		}
 	}
 
-    scf_convergence << run << "," << iteration_counter++ << ",";
-    scf_convergence << std::abs(max_difference - spin_and_site_resolved_density_tol) << std::endl;
+    // scf_convergence << run << "," << iteration_counter++ << ",";
+    // scf_convergence << diff_total << std::endl;
     // std::cout << "Conv. difference:"
     //             << std::abs(max_difference - spin_and_site_resolved_density_tol)
     //             << "\tabs. value: "
@@ -693,29 +813,75 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 
 	//Return whether the spin and site resolved density has converged. The
 	//self-consistent loop will stop once true is returned.
-	if(max_difference > spin_and_site_resolved_density_tol)
+    if(max_difference > spin_and_site_resolved_density_tol)
 		return false;
-	else
-		return true;
+	else{
+        if(k_multiplicity){
+            double total_energy{ 0.0 };
+            double magnetization{ 0.0 };
+            std::cout << "Writing results to ev_with_occupations.txt" << '\n';
+            std::ofstream afile("ev_with_occupations.txt", std::ios::out);
+            if (afile.is_open()) {
+                for (size_t i = 0; i < eigenstates.size(); i++) {
+                    afile << eigenstates[i];
+                    if(eigenstates[i].occupation){
+                        total_energy += eigenstates[i].eigenvalue;
+                        //spin_density = spin_density + eigenstates[i].eigenvector;
+                    }
+                }
+                std::cout << '\n';
+                for (size_t i = 0; i < density_down.size(); i++) {
+                    magnetization += std::abs(density_down[i] - density_up[i]);
+                }
+                afile.close();
+                std::cout << "Total Magnetization: " << magnetization << '\n';
+                std::cout << "Total Energy: " << total_energy << '\n';
+            }
+
+            // std::ofstream scaling_results("7agnr_scaling.txt", std::ios::app);
+            // if (scaling_results.is_open()) {
+            //     scaling_results << k_num_unit_cells;
+            //     scaling_results << ",";
+            //     scaling_results << k_multiplicity;
+            //     scaling_results << ",";
+            //     scaling_results << (U/t.real());
+            //     scaling_results << ",";
+            //     scaling_results << magnetization;
+            //     scaling_results << ",";
+            //     scaling_results << total_energy;
+            //     scaling_results << "\n";
+            //     scaling_results.close();
+            // }
+
+        }
+        return true;
+    }
 }
+
 
 int main(int argc, char *argv[]){
     string periodicity_direction { "" };
     double periodicity_distance { 0.0 };
-    complex<double> t { 1.0 };
     double threshold { 1.7 };
     bool hubbard { false };
-    double temperature { 0.01 };
     int multiplicity { 0 };
+    string ig{ "" };
 
-    scf_convergence.open("scf_convergence.txt");
-    //scf_convergence << "run,iteration,error" << std::endl;
+    // scf_convergence.open("scf_convergence.txt");
+    // scf_convergence << "run,iteration,error" << std::endl;
 
     if(argc == 1){
         std::cout << "You need to provide at least a file." << '\n';
         print_help(false); exit(0);
     }
     string file = argv[1];
+
+    // Extracting the number of unit cells from the input file
+    // string length{ "" };
+    // for(int i = 24; i < file.size()-4; ++i){
+    //     length += file[i];
+    // }
+    // k_num_unit_cells = std::stoi(length);
     std::ifstream in(file);
 
     for(int i = 0; i < argc; ++i){
@@ -735,15 +901,43 @@ int main(int argc, char *argv[]){
                 hubbard = U;
             }
             if(!strcmp(argv[i], "-T") || !strcmp(argv[i], "--temperature")){
-                temperature = std::stod(argv[++i]);
+                k_temperature = std::stod(argv[++i]);
             }
+            if(!strcmp(argv[i], "-it") || !strcmp(argv[i], "--iterations")){
+                k_num_iterations = std::stod(argv[++i]);
+            }
+
             if(!strcmp(argv[i], "-M") || !strcmp(argv[i], "--multiplicity")){
                 multiplicity = std::stod(argv[++i]);
-                k_multiplicity = multiplicity; //casting
-                if(temperature != 0.01){
+                k_multiplicity = multiplicity;
+                if(k_temperature != 0.001){
                     std::cout << "Setting temperature to 0." << '\n';
                 }
-                temperature = 0;
+                k_temperature = 0;
+            }
+            if(!strcmp(argv[i], "-ig") || !strcmp(argv[i], "--initial_guess")){
+                ig = argv[++i];
+                if(ig == "zero"){
+                    k_initial_guess = 0;
+                }
+                else if(ig == "one"){
+                    k_initial_guess = 1;
+                }
+                else if(ig == "random"){
+                    k_initial_guess = 1010;
+                }
+                else if(ig == "zeroone"){
+                    k_initial_guess = 10;
+                }
+                else{
+                    k_initial_guess = 1010;
+                }
+            }
+            if(!strcmp(argv[i], "-v") || !strcmp(argv[i], "--verbose")){
+                verbosity = 2;
+            }
+            if(!strcmp(argv[i], "-q") || !strcmp(argv[i], "--quiet")){
+                verbosity = 0;
             }
             if(!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")){
                 print_help(true); exit(0);
@@ -754,7 +948,7 @@ int main(int argc, char *argv[]){
             print_help(false); exit(0);
         }
     }
-    if(multiplicity && temperature){
+    if(multiplicity && k_temperature){
         std::cout << "Invalid parameter combination. Cannot use both temperature and multiplicity as inputs at the same time." << '\n';
         print_help(false); exit(0);
     }
@@ -763,10 +957,14 @@ int main(int argc, char *argv[]){
         periodic = true;
     }
 
-    std::cout << "Variable values: " << '\n';
-    PRINTVAR(periodicity_direction); PRINTVAR(periodicity_distance);
-    PRINTVAR(t); PRINTVAR(threshold); PRINTVAR(hubbard); //PRINTVAR(periodic);
-    PRINTVAR(temperature); PRINTVAR(multiplicity);
+    if(verbosity){
+        std::cout << "Variable values: " << '\n';
+        PRINTVAR(periodicity_direction); PRINTVAR(periodicity_distance);
+        PRINTVAR(t); PRINTVAR(threshold); PRINTVAR(U);
+        PRINTVAR(k_temperature); PRINTVAR(k_multiplicity);
+        std::cout << "initial_guess = " << ig << "\n\n";
+    }
+
 
     //Usage example
     Molecule example_mol;
@@ -782,13 +980,15 @@ int main(int argc, char *argv[]){
     //Create bonds in molecule
     bonds.add_bonds(example_mol, threshold);
     //bonds.print_bonds();
-    //bonds.print_hoppings();
+
+    if(verbosity == 2){
+        bonds.print_hoppings();
+    }
 
     Array<double> dummy_array({2, example_mol.size()});
     spin_and_site_resolved_density = dummy_array;
 
     init_spin_and_site_resolved_density(spin_and_site_resolved_density);
-
 
     model = create_hamiltonian(example_mol, bonds, t, hubbard);
 
@@ -797,8 +997,9 @@ int main(int argc, char *argv[]){
 	solver.setModel(model);
     if(hubbard){
         solver.setSelfConsistencyCallback(self_consistency_callback);
-	    solver.setMaxIterations(1000);
+	    solver.setMaxIterations(k_num_iterations);
     }
+
 	//Run the solver. This will run a self-consistent loop where the
 	//Hamiltonian first is diagonalized, and then the
 	//self_consistency_callback is called. The procedure is repeated until
@@ -806,7 +1007,10 @@ int main(int argc, char *argv[]){
 	//number of iterations is reached.
 	solver.run();
 
-    if(hubbard) std::cout << "Final chemical potential: " << model.getChemicalPotential() << '\n';
+    if(verbosity){
+        if(hubbard && k_temperature) std::cout << "Final chemical potential: " \
+                << model.getChemicalPotential() << '\n';
+    }
 
 	PropertyExtractor::Diagonalizer pe(solver);
 
@@ -820,31 +1024,36 @@ int main(int argc, char *argv[]){
 	int basisSize = model.getBasisSize();
 	ofstream myfile;
 	myfile.open("eigenval_eigenvec.txt");
-	std::cout << "Writing Eigenvalues and Eigenvectors to file" << '\n';
-	for(int i = 0; i < basisSize; ++i){
+	if(verbosity){
+        std::cout << "Writing raw Eigenvalues and Eigenvectors to file eigenval_eigenvec.txt ..." << '\n';
+	}
+    for(int i = 0; i < basisSize; ++i){
 		myfile << eigen_values[i] << " ";
 		for(int j = 0; j < basisSize; ++j)
 			myfile << eigen_vectors[i*basisSize + j] << " ";
 		myfile << '\n';
 	}
-	std::cout << "Writing done." << '\n';
-	myfile.close();
+    if(verbosity > 0){
+	   std::cout << "Writing done." << '\n';
+    }
+
+    myfile.close();
 
     std::ifstream read_back;
     read_back.open("eigenval_eigenvec.txt");
 
-
     ofstream processed_data;
     processed_data.open("processed_ev.txt");
-    std::cout << "Writing processed data to file." << '\n';
+    std::cout << "Writing processed data (eigenvalue, spin channel, occupation, eigenvector) to file processed_ev.txt ..." << '\n';
     string file_line { "" };
     while(std::getline(read_back, file_line)){
         Postprocessor processor_down(file_line);
         processor_down.process();
         processed_data << processor_down.stringyfy() << "\n";
     }
-
-    std::cout << "Writing done." << '\n';
+    if(verbosity > 0){
+       std::cout << "Writing done." << '\n';
+    }
     return 0;
 }
 
@@ -852,8 +1061,8 @@ void print_help(bool full){
     if(full){
         printf("/**********************************************************************/\n");
         printf("// Tight-Binding and Mean-Field Hubbard approximation                 //\n");
-        printf("// Bachelor's thesis, Spring Semester 2019, ETH Zurich                //\n");
-        printf("// Author: Robin Worreby                                              //\n");
+        printf("// Bachelor's thesis, 2019/2020, ETH Zurich                           //\n");
+        printf("// Author: Robin Worreby, BSc RW/CSE                                  //\n");
         printf("// License: Use if you like, but give me credit.                      //\n");
         printf("/**********************************************************************/\n");
         printf("\n");
@@ -874,5 +1083,12 @@ void print_help(bool full){
             \t\t\t  i.e. the solution that is to be found. \n\
             \t\t\t  Default is no specific solution desired. \n\
             \t\t\t  This is mutually exclusive with the -T (temperature) parameter. \n");
+    printf("  -it or --iterations \t\t- sets the max number of iterations for the self-consistent loop. \n");
+    printf("  -ig or --initial_guess \t- lets you set the inital spin and site resolved density.\n\
+            \t\t\t  Possibilities are: zero, one, zeroone, random. \n\
+            \t\t\t  Where 'zeroone' means 1 on one spin channel and 0 on the other.\n\
+            \t\t\t  Default is random.\n");
+    printf("  -v or --verbose \t\t- prints additional information.\n");
+    printf("  -q or --quiet \t\t- prints only the bare minimum.\n");
     printf("  -h or --help \t\t\t- prints this help info.\n");
 }
