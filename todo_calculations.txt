@@ -1,3 +1,32 @@
+Updated ToDo:
+
+Molecules:
+    - Total absolute magnetization singlet / triplet start from 0.0 (add calc 0.0 - 1.0)
+    - Singlet-Triplet energy diff in 1 plot, change color palette to scaling
+
+    - GNF with SW: Qualitative plots (Magnetization),
+        -> discussion of magnetization difference, HOMO-LUMO gap
+        -> Check quintet Solution
+        -> SW raises U level for spin-polarization?
+            -> plot magnetization vs U (check pristine gnf vs gnf-SW): 2 different sizes.
+
+    - AGNR Termini, put 1 size (len 4/8) for triplet / singlet in main thesis part, then
+        len 2, 8/4, 16 in appendix
+
+Periodic:
+    - ZGNR / AGNR: Use U=1.7 for all. Replace "H" with "U".
+
+    - GNR + SW: Squish plots (vertically longer, horizontally 1/3 from pristine band structure),
+        put next to each other: pristine band structure, 3x unit length pristine (1/3 size),
+                                hubbard band structure, 3x hubbard (1/3 size)
+                                3x ul SW and SW-hubbard (1/3 size)
+
+
+    blob: drop
+    # - blob: blob only one side / blob less dense and reproduce plot like fig 4a) in paper edge-magnetism.
+    #    -> Mag vs U
+_______________________________________________________________________________
+
 7AGNR:
  - Scaling of 7AGNR wrt U and length of GNR.
     -> What Parameters for calculation?
