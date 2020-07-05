@@ -9,7 +9,7 @@ def main(argv):
 
     repetitions = int(band_thickness/4)
 
-    y_dist = 2.46
+    # y_dist = 2.46
     reg_dist = 1.42
     half_reg_dist = reg_dist / 2.0
     spec_dist = 1.23
@@ -17,7 +17,7 @@ def main(argv):
     y = 0
     x = 0
 
-    whole_x = False
+    # whole_x = False
 
     print(atoms)
     for i in range(band_length):
