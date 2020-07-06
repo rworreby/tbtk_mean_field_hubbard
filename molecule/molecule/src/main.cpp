@@ -803,6 +803,8 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
 		}
 	}
 
+    // std::cout << "Diff total: " << diff_total << '\n';
+
     // scf_convergence << run << "," << iteration_counter++ << ",";
     // scf_convergence << diff_total << std::endl;
     // std::cout << "Conv. difference:"
@@ -811,6 +813,13 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
     //             << spin_and_site_resolved_density[{max_spin, max_site}]
     //             << "\tlocation: " << max_spin << " " << max_site << '\n';
 
+
+    static int iteration_counter{ 0 };
+    if(++iteration_counter == k_num_iterations){
+        std::cout << "\nReached max number of iterations.\n"
+                  << "Solution did not converge." << '\n';
+        exit(0);
+    }
 	//Return whether the spin and site resolved density has converged. The
 	//self-consistent loop will stop once true is returned.
     if(max_difference > spin_and_site_resolved_density_tol)
@@ -819,7 +828,11 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
         if(k_multiplicity){
             double total_energy{ 0.0 };
             double magnetization{ 0.0 };
-            std::cout << "Writing results to ev_with_occupations.txt" << '\n';
+            double homo{ 0.0 };
+            double lumo{ 0.0 };
+            bool lumo_found{ false };
+
+            std::cout << "\nWriting results to ev_with_occupations.txt" << '\n';
             std::ofstream afile("ev_with_occupations.txt", std::ios::out);
             if (afile.is_open()) {
                 for (size_t i = 0; i < eigenstates.size(); i++) {
@@ -827,6 +840,11 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
                     if(eigenstates[i].occupation){
                         total_energy += eigenstates[i].eigenvalue;
                         //spin_density = spin_density + eigenstates[i].eigenvector;
+                        homo = eigenstates[i].eigenvalue;
+                    }
+                    else if(!lumo_found){
+                        lumo = eigenstates[i].eigenvalue;
+                        lumo_found = true;
                     }
                 }
                 std::cout << '\n';
@@ -836,22 +854,27 @@ bool self_consistency_callback(Solver::Diagonalizer &solver){
                 afile.close();
                 std::cout << "Total Magnetization: " << magnetization << '\n';
                 std::cout << "Total Energy: " << total_energy << '\n';
+                std::cout << "HOMO-LUMO gap: " << (homo - lumo) << '\n';
             }
 
-            // std::ofstream scaling_results("7agnr_scaling.txt", std::ios::app);
-            // if (scaling_results.is_open()) {
-            //     scaling_results << k_num_unit_cells;
-            //     scaling_results << ",";
-            //     scaling_results << k_multiplicity;
-            //     scaling_results << ",";
-            //     scaling_results << (U/t.real());
-            //     scaling_results << ",";
-            //     scaling_results << magnetization;
-            //     scaling_results << ",";
-            //     scaling_results << total_energy;
-            //     scaling_results << "\n";
-            //     scaling_results.close();
-            // }
+            std::ofstream scaling_results("molecule_scaling.txt", std::ios::app);
+            if (scaling_results.is_open()) {
+                scaling_results << k_num_unit_cells; // 2
+                scaling_results << ",";
+                scaling_results << k_multiplicity;
+                scaling_results << ",";
+                scaling_results << (U/t.real()); // U
+                // scaling_results << ",";
+                // scaling_results << "1"; // stone wales
+                scaling_results << ",";
+                scaling_results << magnetization;
+                scaling_results << ",";
+                scaling_results << total_energy;
+                // scaling_results << ",";
+                // scaling_results << (homo - lumo);
+                scaling_results << "\n";
+                scaling_results.close();
+            }
 
         }
         return true;
@@ -876,12 +899,12 @@ int main(int argc, char *argv[]){
     }
     string file = argv[1];
 
-    // Extracting the number of unit cells from the input file
-    // string length{ "" };
-    // for(int i = 24; i < file.size()-4; ++i){
-    //     length += file[i];
-    // }
-    // k_num_unit_cells = std::stoi(length);
+    //Extracting the number of unit cells from the input file
+    string length{ "" };
+    for(int i = 24; i < file.size()-4; ++i){
+        length += file[i];
+    }
+    k_num_unit_cells = std::stoi(length);
     std::ifstream in(file);
 
     for(int i = 0; i < argc; ++i){
