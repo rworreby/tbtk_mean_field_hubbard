@@ -7,7 +7,7 @@ sns.set()
 
 df = pd.read_csv('results.txt')
 
-fig = plt.figure(figsize=(15, 15))
+fig = plt.figure(figsize=(5, 15))
 plt.plot(df, c='black')
 
 # plt.ylim(-5,5)
